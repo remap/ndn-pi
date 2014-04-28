@@ -9,22 +9,11 @@ import time
 from pyndn import Name
 from pyndn import Data
 from pyndn import Face
-from pyndn.security import KeyType
 from pyndn.security import KeyChain
-from pyndn.security.identity import IdentityManager
-from pyndn.security.identity import MemoryIdentityStorage
-from pyndn.security.identity import MemoryPrivateKeyStorage
-from pyndn.util import Blob
 
 import subprocess
 # from pir import readPir # TODO: include, run as root
 from os.path import expanduser, join
-
-with open(join(expanduser("~"), ".ssh", "id_rsa.pub")) as file:
-    DEFAULT_PUBLIC_KEY_DER = bytearray(file.read())
-
-with open(join(expanduser("~"), ".ssh", "id_rsa")) as file:
-    DEFAULT_PRIVATE_KEY_DER = bytearray(file.read())
 
 def dump(*list):
     result = ""
@@ -74,24 +63,13 @@ def getSerial():
 def main():
     face = Face("localhost")
 
-    # TODO: Change to my own storage
-    identityStorage = MemoryIdentityStorage()
-    privateKeyStorage = MemoryPrivateKeyStorage()
-    keyChain = KeyChain(
-      IdentityManager(identityStorage, privateKeyStorage), None)
-    keyChain.setFace(face)
-
     # Initialize the storage.
-    keyName = Name("/testname/DSK-123")
-    certificateName = keyName.getSubName(0, keyName.size() - 1).append(
-      "KEY").append(keyName[-1]).append("ID-CERT").append("0")
-    identityStorage.addKey(keyName, KeyType.RSA, Blob(DEFAULT_PUBLIC_KEY_DER))
-    privateKeyStorage.setKeyPairForKeyName(
-      keyName, DEFAULT_PUBLIC_KEY_DER, DEFAULT_PRIVATE_KEY_DER)
+    keyChain = KeyChain()
+    face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName())
 
     # serial = getSerial()
     # TODO: How do we factor in timestamp at end of prefix?
-    echo = Echo(keyChain, certificateName)
+    echo = Echo(keyChain, keyChain.getDefaultCertificateName())
     prefix = Name("/ndn/ucla.edu/pitest/data/") # TODO: /pitest/<serial>/data?
     dump("Register prefix", prefix.toUri())
     face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
