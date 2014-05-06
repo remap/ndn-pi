@@ -10,7 +10,7 @@
 #make
 #sudo make install
 
-#cd ~/ndn/ndn-cpp-dev
+#cd ~/ndn/ndn-cxx
 #git pull
 #./waf configure
 #./waf
@@ -28,3 +28,5 @@ git pull
 ./waf
 sudo ./waf install
 
+cd ~/ndn/PyNDN2
+git pull

@@ -1,6 +1,6 @@
 git clone https://github.com/named-data/ndnx
 git clone https://github.com/named-data/ndn-cpp
-git clone https://github.com/named-data/ndn-cpp-dev
+git clone https://github.com/named-data/ndn-cxx
 git clone https://github.com/named-data/ndnd-tlv
 git clone https://github.com/named-data/NFD
 git clone https://github.com/named-data/PyNDN2
