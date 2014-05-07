@@ -1,23 +1,26 @@
 import RPi.GPIO as gpio
 from time import sleep
 
-PIR = 12
+PIR_PIN = 12
 
-gpio.setmode(gpio.BOARD)
-gpio.setup(PIR, gpio.IN)
+class Pir():
+    def __init__(self):
+        gpio.setmode(gpio.BOARD)
+        gpio.setup(PIR_PIN, gpio.IN)
 
-def readPir():
-    pirVal = gpio.input(PIR)
-    if pirVal:
-        return "True"
-    else:
-        return "False"
+    def read(self):
+        pirVal = gpio.input(PIR_PIN)
+        if pirVal:
+            return "True"
+        else:
+            return "False"
 
-def monitorPir():
-    while True:
-        v = readPir()
-        print v
-        sleep(1)
+    def monitor(self):
+        while True:
+            v = self.read()
+            print v
+            sleep(1)
 
 if __name__ == "__main__":
-    monitorPir()
+    pir = Pir()
+    pir.monitor()
