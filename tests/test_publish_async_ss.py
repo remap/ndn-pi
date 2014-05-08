@@ -12,8 +12,11 @@ from pyndn import Face
 from pyndn.security import KeyChain
 
 import subprocess
-# from pir import readPir # TODO: include, run as root
 from os.path import expanduser, join
+
+from sensors.pir import Pir
+
+pir = Pir()
 
 def dump(*list):
     result = ""
@@ -37,8 +40,8 @@ class Echo(object):
             temp = subprocess.check_output(["vcgencmd", "measure_temp"])
             content = time.strftime("%d %b, %Y %H:%M:%S") + temp
         elif interest.getName().getSubName(4).equals(Name("/pir")):
-            pir = 'Insert pir status here' # TODO: readPir()
-            content = time.strftime("%d %b, %Y %H:%M:%S") + pir
+            pirVal = pir.read()
+            content = time.strftime("%d %b, %Y %H:%M:%S") + pirVal
         data.setContent(content)
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()
@@ -67,10 +70,10 @@ def main():
     keyChain = KeyChain()
     face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName())
 
-    # serial = getSerial()
+    serial = getSerial()
     # TODO: How do we factor in timestamp at end of prefix?
     echo = Echo(keyChain, keyChain.getDefaultCertificateName())
-    prefix = Name("/ndn/ucla.edu/pitest/data/") # TODO: /pitest/<serial>/data?
+    prefix = Name("/home/dev/" + serial + "/data")
     dump("Register prefix", prefix.toUri())
     face.registerPrefix(prefix, echo.onInterest, echo.onRegisterFailed)
 

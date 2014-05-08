@@ -34,15 +34,15 @@ def main():
     
     counter = Counter()
 
-    name0 = Name("/ndn/ucla.edu/pitest/data");
+    name0 = Name("/home")
     dump("Express name ", name0.toUri())
     face.expressInterest(name0, counter.onData, counter.onTimeout)
 
-    name1 = Name("/ndn/ucla.edu/pitest/data/temp"); 
+    name1 = Name("/home/dev/00000000d1f25339/data/temp")
     dump("Express name ", name1.toUri())
     face.expressInterest(name1, counter.onData, counter.onTimeout)
 
-    name2 = Name("/ndn/ucla.edu/pitest/data/pir"); 
+    name2 = Name("/home/dev/00000000d1f25339/data/pir")
     dump("Express name ", name2.toUri())
     face.expressInterest(name2, counter.onData, counter.onTimeout)
 
