@@ -1,5 +1,6 @@
 import time
 from pyndn import Name
+from pyndn import Interest
 from pyndn import Data
 from pyndn import Face
 from pyndn.security import KeyChain
@@ -9,6 +10,7 @@ from os.path import expanduser, join
 import socket
 from sensors.pir import Pir
 import struct
+import json
 
 def getSerial():
     with open('/proc/cpuinfo') as f:
@@ -47,8 +49,10 @@ class PirDataLogger:
         # self.si = pyccn.SignedInfo(self.key.publicKeyID, pyccn.KeyLocator(self.key_name))
 
     def publishData(self, payload, timestamp):
-        timestampPacked = struct.pack('!Q', timestamp)
-        data = Data(self.prefix.append(timestampPacked))
+        #timestampPacked = struct.pack('!Q', timestamp)
+        dataName = Name(self.prefix).append(str(timestamp))
+        #dataName = Name(self.prefix).append(timestampPacked)
+        data = Data(dataName)
 
         content = json.dumps(payload)
         data.setContent(content)
@@ -57,24 +61,27 @@ class PirDataLogger:
         # how to set co.signedInfo?
         # co.signedInfo = self.si # OLD
 
+        # TODO: Make sure signing worked right
         self._keyChain.sign(data, self._certificateName)
+        print "Publishing data", content, "named", dataName.toUri()
         self.publisher.put(data)
-        dump("Published data", content)
-        dump("at ", timestamp_ms_packed)
-        dump("named ", self.prefix.append(timestamp_ms_packed))
-        print self.prefix # TODO: make sure self.prefix is "/home/dev/<serial>/pir/0/data"
 
-    def expressDataReadyCommandInterest(self, name):
-        interest = Interest(Name("/home/all/command/dataready/dataready/dev/" + self.serial + "/pir/0/data/"))
+    def expressCommandInterestDataSetReady(self, timestamp):
+        interest = Interest(Name("/home/all/command/datasetready").append(self.prefix.getSubName(1)).append(str(timestamp)))
         interest.setInterestLifetimeMilliseconds(3000)
         # TODO: Start timer
-        self.commandInterestFace.expressInterest(interest, counter.onData, expressDataReadyCommandInterest(name))
-        # TODO: probably shouldn't directly call expressDataReadyCommandInterest on timeout (= infinite loop if fail)
+        self.commandInterestFace.expressInterest(interest, self.onData, self.onTimeout)
+        # TODO: probably shouldn't directly call self.expressCommandInterestDataSetReady on timeout (= infinite loop if fail)
+
+    def onTimeout(self, interest):
+        print "Interest:", interest.getName().toUri(), "timed out"
+        # call expressInterest again
 
     def onData(self, interest, data):
         # TODO: how to tweak the onData function to receive interests
         # Whoop-de-friggin-do
         pass
+        print "Interest:", interest.getName().toUri(), "got data named:", data.getName().toUri(), "with content:", data.getContent().toRawStr()
 
     def run(self):
         # Publish first packet regardless of change
@@ -83,22 +90,26 @@ class PirDataLogger:
         timestamp = int(time.time() * 1000) # in milliseconds
         self.publishData(payload, timestamp)
         sample_count = 1
-        timestampPacked = struct.pack('!Q', timestamp)
-        expressDataReadyCommandInterest("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
+        #timestampPacked = struct.pack('!Q', timestamp)
+        #self.expressCommandInterestDataSetReady("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
+        self.expressCommandInterestDataSetReady(timestamp)
 
         while (True):
             pirVal = self.pir.read()
             if prevPirVal != pirVal:
                 payload = {'pir':pirVal}
                 timestamp = int(time.time() * 1000) # in milliseconds
-                self.publishData(payload)
+                #timestampPacked = struct.pack('!Q', timestamp)
+                self.publishData(payload, timestamp)
                 sample_count += 1
                 
                 # TODO: Express command interest
-                expressDataReadyCommandInterest("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
-            
+                #self.expressCommandInterestDataSetReady("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
+                self.expressCommandInterestDataSetReady(timestamp)
+
+            self.commandInterestFace.processEvents()
             time.sleep(self.interval)
 
 if __name__ == "__main__":
-    logger = PirDataLogger(data_interval = 0.5) # sample at every 0.5 seconds
+    logger = PirDataLogger(data_interval = 0.5) # sample at every 0.5 seconds (also affects face.processEvents)
     logger.run()
