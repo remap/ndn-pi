@@ -67,7 +67,7 @@ class PirDataLogger:
         self.publisher.put(data)
 
     def expressCommandInterestDataSetReady(self, timestamp):
-        interest = Interest(Name("/home/all/command/datasetready").append(self.prefix.getSubName(1)).append(str(timestamp)))
+        interest = Interest(Name("/home/all/command/datasetready").append(self.prefix).append(str(timestamp)))
         interest.setInterestLifetimeMilliseconds(3000)
         # TODO: Start timer
         self.commandInterestFace.expressInterest(interest, self.onData, self.onTimeout)
@@ -90,6 +90,10 @@ class PirDataLogger:
         timestamp = int(time.time() * 1000) # in milliseconds
         self.publishData(payload, timestamp)
         sample_count = 1
+
+        # Wait 0.5 sec for data to be inserted into repo
+        time.sleep(0.5)
+
         #timestampPacked = struct.pack('!Q', timestamp)
         #self.expressCommandInterestDataSetReady("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
         self.expressCommandInterestDataSetReady(timestamp)
@@ -102,7 +106,10 @@ class PirDataLogger:
                 #timestampPacked = struct.pack('!Q', timestamp)
                 self.publishData(payload, timestamp)
                 sample_count += 1
-                
+
+                # Wait 0.5 sec for data to be inserted into repo
+                time.sleep(0.5)
+
                 # TODO: Express command interest
                 #self.expressCommandInterestDataSetReady("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
                 self.expressCommandInterestDataSetReady(timestamp)
