@@ -41,7 +41,7 @@ class Echo(object):
             content = time.strftime("%d %b, %Y %H:%M:%S") + temp
         elif interest.getName().getSubName(4).equals(Name("/pir")):
             pirVal = pir.read()
-            content = time.strftime("%d %b, %Y %H:%M:%S") + pirVal
+            content = time.strftime("%d %b, %Y %H:%M:%S") + str(pirVal)
         data.setContent(content)
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()

@@ -9,11 +9,7 @@ class Pir():
         gpio.setup(PIR_PIN, gpio.IN)
 
     def read(self):
-        pirVal = gpio.input(PIR_PIN)
-        if pirVal:
-            return "True"
-        else:
-            return "False"
+        return bool(gpio.input(PIR_PIN))
 
     def monitor(self):
         while True:
