@@ -6,12 +6,18 @@ Make sure you've already done:
 
 On producer/pir pi:
 	nfd-start
-	nfdc register / udp://192.168.1.5
+	nfdc register /home 2
+	ndn-repo-ng -c config/repo-ng.conf &
 	sudo su
 	export PYTHONPATH=$PYTHONPATH:<PyNDN2 root>/python:<ndn-pi root>
-	python test_publish_async_ss.py
+	python tests/publish_pir.py
 
 On consumer/cec pi:
 	nfd-start
-	nfdc register / udp://192.168.1.4
+	nfdc register /home 3
 	python test_get_async_ss.py
+
+Note about nfdc register command
+<faceId> is the udp multicast face, which can be attained via nfd-status - it's the line with udp4://224.0.23.170:56363
+For the gateway, it's 3
+For non-gateways, it's 2
