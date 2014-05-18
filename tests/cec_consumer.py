@@ -5,6 +5,9 @@ from pyndn import Face
 from pyndn import Interest
 from pyndn.security import KeyChain
 
+import json
+import subprocess
+
 class Echo(object):
     def __init__(self, face, keyChain, certificateName):
         self._face = face
@@ -24,6 +27,8 @@ class Echo(object):
         commandInterest = interest # for naming clarity, since we respond to interest with interest
         print "Received command interest:", commandInterest.getName().toUri()
 
+        # TODO: Verify command interests legitimacy
+
         # Respond to interest with data ack
         data = Data(interest.getName())
         data.setContent("ACK")
@@ -41,9 +46,22 @@ class Echo(object):
 
     def onData(self, interest, data):
         self._responseCount += 1
-        print "Interest:", interest.getName().toUri(), "got data named:", data.getName().toUri(), "with content:", data.getContent().toRawStr()
-        print "Key name:", data.getSignature().getKeyLocator().getKeyName().toUri()
-        print "Signature:", data.getSignature().getSignature().toHex()
+        content = data.getContent().toRawStr()
+        print "Interest:", interest.getName().toUri(), "got data named:", data.getName().toUri(), "with content:", content
+        d = json.loads(content)
+        pirVal = d["pir"]
+
+        # TODO: Verify data packet's legitimacy
+
+        # TODO: refactor
+        # TODO: Don't hardcode "0" (tv's logical address)
+        if pirVal:
+            proc = subprocess.Popen(["cec-client", "-s", "-d", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            (out, err) = proc.communicate(input="on 0")
+            #subprocess.check_call(["echo ", "", ""]) # TODO: Use check_call or check_output?
+        else:
+            proc = subprocess.Popen(["cec-client", "-s", "-d", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+            (out, err) = proc.communicate(input="standby 0")
 
     def onTimeout(self, interest):
         self._responseCount += 1
@@ -60,3 +78,4 @@ if __name__ == "__main__":
     echo.run(prefix)
 
     face.shutdown()
+
