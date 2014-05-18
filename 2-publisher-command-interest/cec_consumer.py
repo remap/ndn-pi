@@ -25,7 +25,7 @@ class Echo(object):
     def onInterest(self, prefix, interest, transport, registeredPrefixId):
         self._responseCount += 1
         commandInterest = interest # for naming clarity, since we respond to interest with interest
-        print "Received command interest:", commandInterest.getName().toUri()
+        print "Received Command Interest:", commandInterest.getName().toUri()
 
         # TODO: Verify command interests legitimacy
 
@@ -35,11 +35,13 @@ class Echo(object):
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()
         transport.send(encodedData.toBuffer())
+        print "Sent Data:", data.getName().toUri(), "with content:", "ACK"
 
         # Send interest requesting data
         responseInterest = Interest(Name(commandInterest.getName().getSubName(4)))
         responseInterest.setInterestLifetimeMilliseconds(3000)
         self._face.expressInterest(responseInterest, self.onData, self.onTimeout)
+        print "Sent Interest:", responseInterest.getName().toUri()
 
     def onRegisterFailed(self, prefix):
         raise RegisterPrefixError('Register prefix failed')
@@ -47,7 +49,7 @@ class Echo(object):
     def onData(self, interest, data):
         self._responseCount += 1
         content = data.getContent().toRawStr()
-        print "Interest:", interest.getName().toUri(), "got data named:", data.getName().toUri(), "with content:", content
+        print "Received Data:", data.getName().toUri(), "with content:", content
         d = json.loads(content)
         pirVal = d["pir"]
 
