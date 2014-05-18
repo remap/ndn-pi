@@ -56,7 +56,6 @@ class PirDataLogger:
 
         content = json.dumps(payload)
         data.setContent(content)
-        # co.content = json.dumps(payload) # OLD
 
         # how to set co.signedInfo?
         # co.signedInfo = self.si # OLD
@@ -113,6 +112,8 @@ class PirDataLogger:
                 # TODO: Express command interest
                 #self.expressCommandInterestDataSetReady("/dev/" + self.serial + "/pir/0/data/" + timestampPacked)
                 self.expressCommandInterestDataSetReady(timestamp)
+
+                prevPirVal = pirVal
 
             self.commandInterestFace.processEvents()
             time.sleep(self.interval)
