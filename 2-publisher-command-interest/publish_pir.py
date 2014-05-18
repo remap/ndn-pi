@@ -62,7 +62,7 @@ class PirDataLogger:
 
         # TODO: Make sure signing worked right
         self._keyChain.sign(data, self._certificateName)
-        print "Publishing data", content, "named", dataName.toUri()
+        print "Published Data:", data.getName().toUri(), "with content:", content, "to repo"
         self.publisher.put(data)
 
     def expressCommandInterestDataSetReady(self, timestamp):
@@ -70,6 +70,7 @@ class PirDataLogger:
         interest.setInterestLifetimeMilliseconds(3000)
         # TODO: Start timer
         self.commandInterestFace.expressInterest(interest, self.onData, self.onTimeout)
+        print "Sent Command Interest:", interest.getName().toUri()
         # TODO: probably shouldn't directly call self.expressCommandInterestDataSetReady on timeout (= infinite loop if fail)
 
     def onTimeout(self, interest):
@@ -79,8 +80,7 @@ class PirDataLogger:
     def onData(self, interest, data):
         # TODO: how to tweak the onData function to receive interests
         # Whoop-de-friggin-do
-        pass
-        print "Interest:", interest.getName().toUri(), "got data named:", data.getName().toUri(), "with content:", data.getContent().toRawStr()
+        print "Received Data:", data.getName().toUri(), "with content:", data.getContent().toRawStr()
 
     def run(self):
         # Publish first packet regardless of change
