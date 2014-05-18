@@ -1,4 +1,4 @@
-from tests.publish_pir import PirDataLogger
+from 2-publisher-command-interest.publish_pir import PirDataLogger
 
 # TODO: don't hardcode, instead get from command interest
 nodeType = "pir"
