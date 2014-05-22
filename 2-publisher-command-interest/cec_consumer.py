@@ -59,11 +59,13 @@ class Echo(object):
         # TODO: Don't hardcode "0" (tv's logical address)
         if pirVal:
             proc = subprocess.Popen(["cec-client", "-s", "-d", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-            (out, err) = proc.communicate(input="on 0")
-            #subprocess.check_call(["echo ", "", ""]) # TODO: Use check_call or check_output?
-        else:
+            (out, err) = proc.communicate(input="as")
+            time.sleep(2.25)
+            subprocess.check_call(["omxplayer", "-o", "hdmi", "/home/pi/YOUSHALLNOTPASS.mp4"])
             proc = subprocess.Popen(["cec-client", "-s", "-d", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
             (out, err) = proc.communicate(input="standby 0")
+        else:
+            pass # you shall pass
 
     def onTimeout(self, interest):
         self._responseCount += 1
