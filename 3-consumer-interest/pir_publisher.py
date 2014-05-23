@@ -28,12 +28,14 @@ class PirPublisher(object):
 
         self._count = 0
         
-    def onInterestDev(self, prefix, interest, transport, registeredPrefixId):
-        print "Got interest for", interest.getName().toUri(), "at prefix", prefix.toUri()
+#    def onInterestDev(self, prefix, interest, transport, registeredPrefixId):
+#        print "Got interest for", interest.getName().toUri(), "at prefix", prefix.toUri()
 
     def onInterestPir(self, prefix, interest, transport, registeredPrefixId):
-        print "onInterest"
+        print "ENTER PUBLISHERS ONINTEREST"
         pirVal = self._pir.read()
+
+        # CHECK EXCLUDE FILTER
 
 #        if pirVal != self._prevPirVal:
         timestamp = int(time.time() * 1000) # in milliseconds
@@ -42,6 +44,8 @@ class PirPublisher(object):
         payload = { "pir" : pirVal, "count" : self._count, "src" : "1" }
         content = json.dumps(payload)
         data.setContent(content)
+
+        data.getMetaInfo().setFreshnessPeriod(6000000)
 
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()
