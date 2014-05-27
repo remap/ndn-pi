@@ -15,7 +15,7 @@ import json
 class PirPublisher(object):
     def __init__(self):
         self._serial = Common.getSerial()
-        self._pir = Pir()
+        self._pir = Pir(12)
         self._prevPirVal = self._pir.read()
 
         self._face = Face("localhost")

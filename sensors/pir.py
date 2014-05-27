@@ -1,22 +1,23 @@
 import RPi.GPIO as gpio
 from time import sleep
-
-PIR_PIN = 12
+import sys
 
 class Pir():
-    def __init__(self):
+    def __init__(self, pin):
+        self._pin = pin
         gpio.setmode(gpio.BOARD)
-        gpio.setup(PIR_PIN, gpio.IN)
+        gpio.setup(self._pin, gpio.IN)
 
     def read(self):
-        return bool(gpio.input(PIR_PIN))
-
-    def monitor(self):
-        while True:
-            v = self.read()
-            print v
-            sleep(1)
+        return bool(gpio.input(self._pin))
 
 if __name__ == "__main__":
-    pir = Pir()
-    pir.monitor()
+    if len(sys.argv) != 2:
+        print """Usage: python pir.py <pin>
+<pin>  pin number of pir sensor according to board numbering system (P1-##)"""
+        exit()
+    pir = Pir(int(sys.argv[1]))
+    while True:
+        v = self.read()
+        print v
+        sleep(1)

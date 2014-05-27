@@ -37,7 +37,7 @@ class PirDataLogger:
         self.prefix = Name("/home/dev/" + self.serial + "/pir/0/data")
         self.commandInterestFace = Face("localhost")
         self.interval = data_interval
-        self.pir = Pir()
+        self.pir = Pir(12)
         
         self._keyChain = KeyChain()
         self._certificateName = self._keyChain.getDefaultCertificateName() # Might need to change

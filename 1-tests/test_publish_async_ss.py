@@ -16,7 +16,7 @@ from os.path import expanduser, join
 
 from sensors.pir import Pir
 
-pir = Pir()
+pir = Pir(12)
 
 def dump(*list):
     result = ""
