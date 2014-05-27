@@ -21,8 +21,9 @@ class Consumer(object):
         logging.info("Data: " + data.getName().toUri())
         logging.info("Content: " + data.getContent().toRawStr())
         timeComponent = data.getName().get(3)
-        if not self._exclude.matches(timeComponent):
-            self._exclude.appendComponent(timeComponent)
+        self._exclude.clear()
+        self._exclude.appendAny()
+        self._exclude.appendComponent(timeComponent)
 
     def onTimeout(self, interest):
         self._callbackCount += 1
@@ -41,7 +42,7 @@ class Consumer(object):
         
 
     def run(self):
-        self._face.stopWhen(lambda: self._callbackCount >= 10)
+        self._face.stopWhen(lambda: self._callbackCount >= 100)
         self._loop.call_soon(self.express_interest_and_repeat, self._loop) # might need _threadsafe
         # Run until stopWhen stops the loop.
         self._loop.run_forever()
