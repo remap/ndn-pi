@@ -18,6 +18,6 @@ if __name__ == "__main__":
         exit()
     pir = Pir(int(sys.argv[1]))
     while True:
-        v = self.read()
+        v = pir.read()
         print v
         sleep(1)
