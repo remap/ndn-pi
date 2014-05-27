@@ -1,23 +1,23 @@
 import RPi.GPIO as gpio
 from time import sleep
-
-LED_PIN = 11
+import sys
 
 class Led():
-    def __init__(self):
+    def __init__(self, pin):
+        self._pin = pin
         gpio.setmode(gpio.BOARD)
-        gpio.setup(LED_PIN, gpio.OUT)
+        gpio.setup(self._pin, gpio.OUT)
 
     def set(self, val):
-        gpio.output(LED_PIN, val)
-
-    def flash(self):
-        self.set(False)
-        sleep(2)
-        self.set(True)
-        sleep(2)
-        self.set(False)
+        gpio.output(self._pin, val)
 
 if __name__ == "__main__":
-    led = Led()
-    led.flash()
+    if len(sys.argv) != 2:
+        print """Usage: python led.py <pin>
+<pin>  pin number of led according to board numbering system (P1-##)"""
+    led = Led(int(sys.argv[1]))
+    led.set(False)
+    sleep(2)
+    led.set(True)
+    sleep(2)
+    led.set(False)
