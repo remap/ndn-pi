@@ -36,23 +36,23 @@ class PirPublisher(object):
 
         # CHECK EXCLUDE FILTER
 
-#        if pirVal != self._prevPirVal:
-        timestamp = int(time.time() * 1000) # in milliseconds
-        data = Data(Name(prefix).append(self._serial + str(12)).append(str(timestamp)))
+        if pirVal != self._prevPirVal:
+            timestamp = int(time.time() * 1000) # in milliseconds
+            data = Data(Name(prefix).append(self._serial + str(12)).append(str(timestamp)))
 
-        payload = { "pir" : pirVal, "count" : self._count, "src" : "1" }
-        content = json.dumps(payload)
-        data.setContent(content)
+            payload = { "pir" : pirVal, "count" : self._count, "src" : "1" }
+            content = json.dumps(payload)
+            data.setContent(content)
 
-        data.getMetaInfo().setFreshnessPeriod(6000000)
+            data.getMetaInfo().setFreshnessPeriod(60000) # 1 minute, in milliseconds
 
-        self._keyChain.sign(data, self._certificateName)
-        encodedData = data.wireEncode()
-        transport.send(encodedData.toBuffer())
-        print "Sent data:", data.getName().toUri(), "with content", content
+            self._keyChain.sign(data, self._certificateName)
+            encodedData = data.wireEncode()
+            transport.send(encodedData.toBuffer())
+            print "Sent data:", data.getName().toUri(), "with content", content
 
-        self._prevPirVal = pirVal
-        self._count += 1
+            self._prevPirVal = pirVal
+            self._count += 1
 
     def onRegisterFailed(self, prefix):
         print "Register failed for prefix", prefix.toUri()
