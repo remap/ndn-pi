@@ -32,14 +32,13 @@ class PirPublisher(object):
 #        print "Got interest for", interest.getName().toUri(), "at prefix", prefix.toUri()
 
     def onInterestPir(self, prefix, interest, transport, registeredPrefixId):
-        print "ENTER PUBLISHERS ONINTEREST"
         pirVal = self._pir.read()
 
         # CHECK EXCLUDE FILTER
 
 #        if pirVal != self._prevPirVal:
         timestamp = int(time.time() * 1000) # in milliseconds
-        data = Data(prefix.append(self._serial + str(12)).append(str(timestamp)))
+        data = Data(Name(prefix).append(self._serial + str(12)).append(str(timestamp)))
 
         payload = { "pir" : pirVal, "count" : self._count, "src" : "1" }
         content = json.dumps(payload)
