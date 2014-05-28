@@ -34,11 +34,12 @@ class Consumer(object):
         # Express interest here
         interest = Interest(Name("/home/pir/00000000d1f2533912"))
         interest.setExclude(self._exclude)
-        interest.setInterestLifetimeMilliseconds(10000.0)
+        interest.setInterestLifetimeMilliseconds(1000.0)
+        interest.setChildSelector(1)
         logging.info("Send interest: " + interest.getName().toUri())
         logging.info("Exclude: " + interest.getExclude().toUri())
         self._face.expressInterest(interest, self.onData, self.onTimeout)
-        loop.call_later(0.25, self.express_interest_and_repeat, loop) # there is call_soon_threadsafe but no call_later_threadsafe
+        loop.call_later(0.5, self.express_interest_and_repeat, loop)
         
 
     def run(self):
