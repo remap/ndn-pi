@@ -16,40 +16,59 @@ class Consumer(object):
         self._callbackCountData = 0
         self._callbackCountUniqueData = 0
         self._callbackCountTimeout = 0
-        self._discoveryTimeout = False
-        self._response = False
-        self._stopped = False
         self._loop = asyncio.get_event_loop()
         self._face = ThreadsafeFace(self._loop, "localhost")
-        self._exclude = Exclude()
-        self._deviceExclude = Exclude()
-        self._pirStatuses = {} # { "00000000d1f2533912" : {} }
+        self._pirStatuses = {}
 
-    def onDataDev(self, interest, data):
-#        self._response = True
-        logging.info("Data: " + data.getName().toUri())
-        logging.info("Content: " + data.getContent().toRawStr())
+
+    # Discovery
+    def onDataDiscovery(self, interest, data):
+        logging.info("Received data: " + data.getName().toUri())
+        logging.info("\tContent: " + data.getContent().toRawStr())
+
+        # TODO: save device for each Pir so I can remove pirs if no response
         payload = json.loads(data.getContent().toRawStr())
         for func in payload["functions"]:
             if func["type"] == "pir":
                 pirId = func["id"]
-                self._pirStatuses[pirId] = PirStatus(pirId)
-#                self._pirStatuses[func["id"]] = {}
+                if pirId not in self._pirStatuses:
+                    self._pirStatuses[pirId] = PirStatus(pirId)
             elif func["type"] == "cec":
                 logging.info("CEC node, do nothing right now")
-#        self._deviceExclude.appendComponent(data.getName().get(2))
+
+        # Reissue interest for "/home/dev" excluding devId just received
         devId = data.getName().get(2)
         interest.getExclude().appendComponent(devId)
-        for k, v in self._pirStatuses.iteritems():
-            logging.info("STATUSES: " + str(v))
-#        logging.info("STATUSES: " + str(self._pirStatuses))
-#        self.expressDiscoveryInterest()
         self.expressDiscoveryInterest(interest)
 
+        # Print discovery statuses
+        logging.info("STATUSES: " + str(self._pirStatuses))
+
+    def onTimeoutDiscovery(self, interest):
+        logging.info("Timeout interest: " + interest.getName().toUri())
+        logging.info("Device and resource discovery complete, rescheduling again in 600 seconds")
+        self._loop.call_later(600, self.initDiscovery, self._loop)
+
+    def expressDiscoveryInterest(self, interest):
+        self._face.expressInterest(interest, self.onDataDiscovery, self.onTimeoutDiscovery)
+        logging.info("Sent interest: " + interest.getName().toUri())
+        logging.info("\tExclude: " + interest.getExclude().toUri())
+        logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
+
+    def initDiscovery(self, loop):
+        logging.info("Beginning device and resource discovery")
+        interest = Interest(Name("/home/dev"))
+        interest.setInterestLifetimeMilliseconds(4000.0)
+        # interest.setMaxSuffixComponents(1) # TODO: fix
+        # Express initial discovery interest
+        self.expressDiscoveryInterest(interest)
+
+
+    # Pir Consumption
     def onDataPir(self, interest, data):
         self._callbackCountData += 1
-        logging.info("Data: " + data.getName().toUri())
-        logging.info("Content: " + data.getContent().toRawStr())
+        logging.info("Got data: " + data.getName().toUri())
+        logging.info("\tContent: " + data.getContent().toRawStr())
         pirId = data.getName().get(2).toEscapedString()
         timeComponent = data.getName().get(3)
         self._pirStatuses[pirId].excludeUpTo(timeComponent)
@@ -62,12 +81,12 @@ class Consumer(object):
             self._callbackCountUniqueData += 1
         logging.info("STATUSES: " + str(self._pirStatuses))
 
-    def onTimeout(self, interest):
-        self._callbackCountTimeout += 1
-        logging.info("Timeout interest: " + interest.getName().toUri())
+        # TODO: Send a command interest to TV
+        if pirVal:
+            pass
 
-    def onDiscoveryTimeout(self, interest):
-        self._discoveryTimeout = True
+    def onTimeoutPir(self, interest):
+        self._callbackCountTimeout += 1
         logging.info("Timeout interest: " + interest.getName().toUri())
 
     def express_interest_and_repeat(self, loop):
@@ -80,30 +99,16 @@ class Consumer(object):
             interest.setChildSelector(1)
             logging.info("Send interest: " + interest.getName().toUri())
             logging.info("Exclude: " + interest.getExclude().toUri())
-            self._face.expressInterest(interest, self.onDataPir, self.onTimeout)
+            self._face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
             self._countExpressedInterests += 1
         loop.call_later(0.5, self.express_interest_and_repeat, loop)
 
-    def expressDiscoveryInterest(self, interest):
-        logging.info("Send interest: " + interest.getName().toUri())
-        logging.info("Exclude: " + interest.getExclude().toUri())
-        self._face.expressInterest(interest, self.onDataDev, self.onDiscoveryTimeout)
-
-    def discovery(self, loop):
-        interest = Interest(Name("/home/dev"))
-        interest.setInterestLifetimeMilliseconds(4000.0)
-        self.expressDiscoveryInterest(interest)
-        loop.call_later(600, self.discovery, loop)
 
     def run(self):
-        self._loop.call_soon(self.discovery, self._loop)
-        # self._face.stopWhen(lambda: self._timeout or self._response)
-        # self._loop.run_forever()
-
-        self._face.stopWhen(lambda: self._callbackCountUniqueData >= 5)
+        self._face.stopWhen(lambda: self._callbackCountUniqueData >= 20)
+        self._loop.call_soon(self.initDiscovery, self._loop)
         self._loop.call_soon(self.express_interest_and_repeat, self._loop)
-        # Run until stopWhen stops the loop.
-        self._loop.run_forever()
+        self._loop.run_forever() # Run until stopWhen stops the loop
         self._face.shutdown()
 
 if __name__ == "__main__":
