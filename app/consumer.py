@@ -59,7 +59,7 @@ class Consumer(object):
         logging.info("Beginning device and resource discovery")
         interest = Interest(Name("/home/dev"))
         interest.setInterestLifetimeMilliseconds(4000.0)
-        # interest.setMaxSuffixComponents(1) # TODO: fix
+        interest.setMaxSuffixComponents(2) # TODO: logically should be 1, but doesn't work
         # Express initial discovery interest
         self.expressDiscoveryInterest(interest)
 
@@ -89,25 +89,30 @@ class Consumer(object):
         self._callbackCountTimeout += 1
         logging.info("Timeout interest: " + interest.getName().toUri())
 
-    def express_interest_and_repeat(self, loop):
+    def expressInterestPirAndRepeat(self, loop):
         logging.info("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + "callbackCountTimeout: " + str(self._callbackCountTimeout))
-        # Express interest here
+
+        # Express interest for each pir we have discovered
         for pirId, pirStatus in self._pirStatuses.iteritems():
             interest = Interest(Name("/home/pir").append(pirId))
             interest.setExclude(pirStatus.getExclude())
             interest.setInterestLifetimeMilliseconds(1000.0)
             interest.setChildSelector(1)
-            logging.info("Send interest: " + interest.getName().toUri())
-            logging.info("Exclude: " + interest.getExclude().toUri())
+
             self._face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
             self._countExpressedInterests += 1
-        loop.call_later(0.5, self.express_interest_and_repeat, loop)
+            logging.info("Sent interest: " + interest.getName().toUri())
+            logging.info("\tExclude: " + interest.getExclude().toUri())
+            logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
+ 
+       # Reschedule again in 0.5 sec
+       loop.call_later(0.5, self.expressInterestPirAndRepeat, loop)
 
-
+    # Set up all async function calls
     def run(self):
         self._face.stopWhen(lambda: self._callbackCountUniqueData >= 20)
         self._loop.call_soon(self.initDiscovery, self._loop)
-        self._loop.call_soon(self.express_interest_and_repeat, self._loop)
+        self._loop.call_soon(self.expressInterestPirAndRepeat, self._loop)
         self._loop.run_forever() # Run until stopWhen stops the loop
         self._face.shutdown()
 
