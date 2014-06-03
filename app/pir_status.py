@@ -1,10 +1,10 @@
+# TODO: use bisect.insort instead of append
+
 from pyndn import Exclude
 
 class PirStatus(object):
-    def __init__(self, pirId):
-        self._pirId = pirId
-        self._data = {}
-        self._latestTimestamp = None
+    def __init__(self):
+        self._data = []
         self._exclude = Exclude()
         
     def addData(self, timestamp, value):
@@ -12,12 +12,11 @@ class PirStatus(object):
             return False
         if type(value) is not bool:
             return False
-        if timestamp in self._data:
+        if not any(x[0] == timestamp for x in self._data):
+            self._data.append((timestamp, value))
+            return True
+        else:
             return False
-        self._data[timestamp] = value
-        if timestamp > self._latestTimestamp:
-            self._latestTimestamp = timestamp
-        return True
 
     def getExclude(self):
         return self._exclude
@@ -27,17 +26,11 @@ class PirStatus(object):
         self._exclude.appendAny()
         self._exclude.appendComponent(exclude)
 
-    def getLatestTimestamp(self):
-        return self._latestTimestamp
-
-    def getValueAt(self, timestamp):
-        if timestamp in self._data:
-            return self._data[timestamp]
+    def getLastValue(self):
+        if len(self._data):
+            return self._data[-1][1]
         else:
             return None
 
-    def getLatestValue(self):
-        return self.getValueAt(self.getLatestTimestamp())
-
     def __repr__(self):
-        return "{0} {1!s} {2!s} {3}".format(self._pirId, self._data, self._latestTimestamp, self._exclude.toUri())
+        return "PirStatus(data:{0}, exclude:'{1}')".format(self._data, self._exclude.toUri())
