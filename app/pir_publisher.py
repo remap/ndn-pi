@@ -44,7 +44,7 @@ class PirPublisher(object):
         content = json.dumps(payload)
         data.setContent(content)
 
-        data.getMetaInfo().setFreshnessPeriod(60000) # 1 minute, in milliseconds
+        data.getMetaInfo().setFreshnessPeriod(1000) # 1 second, in milliseconds
 
         self._keyChain.sign(data, self._certificateName)
         encodedData = data.wireEncode()
