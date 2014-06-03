@@ -6,7 +6,7 @@ from pyndn import ThreadsafeFace
 
 import time
 import json
-from app.pir_status import PirStatus
+from app.remote_device import RemoteDevice
 import logging
 logging.basicConfig(filename="async.log", level=logging.INFO)
 
@@ -18,7 +18,7 @@ class Consumer(object):
         self._callbackCountTimeout = 0
         self._loop = asyncio.get_event_loop()
         self._face = ThreadsafeFace(self._loop, "localhost")
-        self._pirStatuses = {}
+        self._remoteDevices = []
 
 
     # Discovery
@@ -29,23 +29,22 @@ class Consumer(object):
         # TODO: save device for each Pir so I can remove pirs if no response
         payload = json.loads(data.getContent().toRawStr())
         for func in payload["functions"]:
-            if func["type"] == "pir":
-                pirId = func["id"]
-                if pirId not in self._pirStatuses:
-                    self._pirStatuses[pirId] = PirStatus(pirId)
-            elif func["type"] == "cec":
-                logging.info("CEC node, do nothing right now")
+            type = func["type"]
+            id = func["id"]
+            if not any(x.type == type and x.id == id for x in self._remoteDevices):
+                logging.info("New device discovered: " + type + " " + id)
+                self._remoteDevices.append(RemoteDevice(type, id))
 
         # Reissue interest for "/home/dev" excluding devId just received
         devId = data.getName().get(2)
         interest.getExclude().appendComponent(devId)
         self.expressDiscoveryInterest(interest)
-
-        # Print discovery statuses
-        logging.info("STATUSES: " + str(self._pirStatuses))
+        logging.info("Reissue interest for \"/home/dev/\" excluding devices already discovered")
 
     def onTimeoutDiscovery(self, interest):
         logging.info("Timeout interest: " + interest.getName().toUri())
+
+        logging.info("Devices discovered: " + str(self._remoteDevices))
         logging.info("Device and resource discovery complete, rescheduling again in 600 seconds")
         self._loop.call_later(600, self.initDiscovery)
 
@@ -81,11 +80,12 @@ class Consumer(object):
         pirVal = payload["pir"]
 
         # Update pirStatus information: add data, exclude last received timestamp
-        self._pirStatuses[pirId].setExcludeUpTo(timeComponent)
-        if self._pirStatuses[pirId].addData(timestamp, pirVal):
+        pir = next((x for x in self._remoteDevices if x.type == "pir" and x.id == pirId), None)
+        pir.status.setExcludeUpTo(timeComponent)
+        if pir.status.addData(timestamp, pirVal):
             self._callbackCountUniqueData += 1
 
-        logging.info("STATUSES: " + str(self._pirStatuses)) # TODO: Cleanup
+        logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
         self.controlTV()
 
     def onTimeoutPir(self, interest):
@@ -96,9 +96,10 @@ class Consumer(object):
         logging.info("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + "callbackCountTimeout: " + str(self._callbackCountTimeout))
 
         # Express interest for each pir we have discovered
-        for pirId, pirStatus in self._pirStatuses.iteritems():
-            interest = Interest(Name("/home/pir").append(pirId))
-            interest.setExclude(pirStatus.getExclude())
+        pirs = [ x for x in self._remoteDevices ]
+        for pir in pirs:
+            interest = Interest(Name("/home/pir").append(pir.id))
+            interest.setExclude(pir.status.getExclude())
             interest.setInterestLifetimeMilliseconds(1000.0)
             interest.setChildSelector(1)
 
@@ -113,12 +114,13 @@ class Consumer(object):
 
     def controlTV(self):
         count = 0
-        for pirId, pirStatus in self._pirStatuses.iteritems():
-            if pirStatus.getLatestValue():
+        pirs = [ x for x in self._remoteDevices if x.type == "pir" ]
+        for pir in pirs:
+            if pir.status.getLastValue():
                 count += 1
         if count >= 2:
             # TODO: Send command interest to TV
-            pass
+            logging.info("turn on tv")
         
 
     # Set up all async function calls
