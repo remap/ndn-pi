@@ -47,7 +47,7 @@ class Consumer(object):
     def onTimeoutDiscovery(self, interest):
         logging.info("Timeout interest: " + interest.getName().toUri())
         logging.info("Device and resource discovery complete, rescheduling again in 600 seconds")
-        self._loop.call_later(600, self.initDiscovery, self._loop)
+        self._loop.call_later(600, self.initDiscovery)
 
     def expressDiscoveryInterest(self, interest):
         self._face.expressInterest(interest, self.onDataDiscovery, self.onTimeoutDiscovery)
@@ -55,7 +55,7 @@ class Consumer(object):
         logging.info("\tExclude: " + interest.getExclude().toUri())
         logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
 
-    def initDiscovery(self, loop):
+    def initDiscovery(self):
         logging.info("Beginning device and resource discovery")
         interest = Interest(Name("/home/dev"))
         interest.setInterestLifetimeMilliseconds(4000.0)
@@ -89,7 +89,7 @@ class Consumer(object):
         self._callbackCountTimeout += 1
         logging.info("Timeout interest: " + interest.getName().toUri())
 
-    def expressInterestPirAndRepeat(self, loop):
+    def expressInterestPirAndRepeat(self):
         logging.info("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + "callbackCountTimeout: " + str(self._callbackCountTimeout))
 
         # Express interest for each pir we have discovered
@@ -105,14 +105,14 @@ class Consumer(object):
             logging.info("\tExclude: " + interest.getExclude().toUri())
             logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
  
-       # Reschedule again in 0.5 sec
-       loop.call_later(0.5, self.expressInterestPirAndRepeat, loop)
+        # Reschedule again in 0.5 sec
+        self._loop.call_later(0.5, self.expressInterestPirAndRepeat)
 
     # Set up all async function calls
     def run(self):
         self._face.stopWhen(lambda: self._callbackCountUniqueData >= 20)
-        self._loop.call_soon(self.initDiscovery, self._loop)
-        self._loop.call_soon(self.expressInterestPirAndRepeat, self._loop)
+        self._loop.call_soon(self.initDiscovery)
+        self._loop.call_soon(self.expressInterestPirAndRepeat)
         self._loop.run_forever() # Run until stopWhen stops the loop
         self._face.shutdown()
 
