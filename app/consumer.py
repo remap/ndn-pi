@@ -59,7 +59,10 @@ class Consumer(object):
         logging.info("Beginning device and resource discovery")
         interest = Interest(Name("/home/dev"))
         interest.setInterestLifetimeMilliseconds(4000.0)
-        interest.setMaxSuffixComponents(2) # TODO: logically should be 1, but doesn't work
+        interest.setMinSuffixComponents(2)
+        interest.setMaxSuffixComponents(2)
+        # includes implicit digest so to match "/home/dev/<dev-id>" must have 2 components
+
         # Express initial discovery interest
         self.expressDiscoveryInterest(interest)
 
@@ -69,21 +72,21 @@ class Consumer(object):
         self._callbackCountData += 1
         logging.info("Got data: " + data.getName().toUri())
         logging.info("\tContent: " + data.getContent().toRawStr())
+
+        # Extract info from data packet
+        payload = json.loads(data.getContent().toRawStr())
         pirId = data.getName().get(2).toEscapedString()
         timeComponent = data.getName().get(3)
-        self._pirStatuses[pirId].excludeUpTo(timeComponent)
-
-        # TODO: modify, save status
-        payload = json.loads(data.getContent().toRawStr())
-        pirVal = payload["pir"]
         timestamp = int(timeComponent.toEscapedString())
+        pirVal = payload["pir"]
+
+        # Update pirStatus information: add data, exclude last received timestamp
+        self._pirStatuses[pirId].setExcludeUpTo(timeComponent)
         if self._pirStatuses[pirId].addData(timestamp, pirVal):
             self._callbackCountUniqueData += 1
-        logging.info("STATUSES: " + str(self._pirStatuses))
 
-        # TODO: Send a command interest to TV
-        if pirVal:
-            pass
+        logging.info("STATUSES: " + str(self._pirStatuses)) # TODO: Cleanup
+        self.controlTV()
 
     def onTimeoutPir(self, interest):
         self._callbackCountTimeout += 1
@@ -107,6 +110,16 @@ class Consumer(object):
  
         # Reschedule again in 0.5 sec
         self._loop.call_later(0.5, self.expressInterestPirAndRepeat)
+
+    def controlTV(self):
+        count = 0
+        for pirId, pirStatus in self._pirStatuses.iteritems():
+            if pirStatus.getLatestValue():
+                count += 1
+        if count >= 2:
+            # TODO: Send command interest to TV
+            pass
+        
 
     # Set up all async function calls
     def run(self):

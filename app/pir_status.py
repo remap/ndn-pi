@@ -22,19 +22,22 @@ class PirStatus(object):
     def getExclude(self):
         return self._exclude
 
-    def getLatestTimestamp(self):
-        return self._latestTimestamp
-
-    def excludeUpTo(self, exclude):
+    def setExcludeUpTo(self, exclude):
         self._exclude.clear()
         self._exclude.appendAny()
         self._exclude.appendComponent(exclude)
+
+    def getLatestTimestamp(self):
+        return self._latestTimestamp
 
     def getValueAt(self, timestamp):
         if timestamp in self._data:
             return self._data[timestamp]
         else:
             return None
+
+    def getLatestValue(self):
+        return self.getValueAt(self.getLatestTimestamp())
 
     def __repr__(self):
         return "{0} {1!s} {2!s} {3}".format(self._pirId, self._data, self._latestTimestamp, self._exclude.toUri())
