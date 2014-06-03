@@ -23,8 +23,8 @@ class Consumer(object):
 
     # Discovery
     def onDataDiscovery(self, interest, data):
-        logging.info("Received data: " + data.getName().toUri())
-        logging.info("\tContent: " + data.getContent().toRawStr())
+        logging.debug("Received data: " + data.getName().toUri())
+        logging.debug("\tContent: " + data.getContent().toRawStr())
 
         # TODO: save device for each Pir so I can remove pirs if no response
         payload = json.loads(data.getContent().toRawStr())
@@ -39,13 +39,12 @@ class Consumer(object):
         devId = data.getName().get(2)
         interest.getExclude().appendComponent(devId)
         self.expressDiscoveryInterest(interest)
-        logging.info("Reissue interest for \"/home/dev/\" excluding devices already discovered")
+        logging.info("Reissue discovery interest for \"/home/dev/\", excluding already discovered devices")
 
     def onTimeoutDiscovery(self, interest):
-        logging.info("Timeout interest: " + interest.getName().toUri())
-
+        logging.debug("Timeout interest: " + interest.getName().toUri())
+        logging.info("Discovery complete, rescheduling again in 600 seconds")
         logging.info("Devices discovered: " + str(self._remoteDevices))
-        logging.info("Device and resource discovery complete, rescheduling again in 600 seconds")
         self._loop.call_later(600, self.initDiscovery)
 
     def expressDiscoveryInterest(self, interest):
@@ -55,7 +54,7 @@ class Consumer(object):
         logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
 
     def initDiscovery(self):
-        logging.info("Beginning device and resource discovery")
+        logging.info("Begin discovery")
         interest = Interest(Name("/home/dev"))
         interest.setInterestLifetimeMilliseconds(4000.0)
         interest.setMinSuffixComponents(2)
@@ -69,8 +68,8 @@ class Consumer(object):
     # Pir Consumption
     def onDataPir(self, interest, data):
         self._callbackCountData += 1
-        logging.info("Got data: " + data.getName().toUri())
-        logging.info("\tContent: " + data.getContent().toRawStr())
+        logging.debug("Got data: " + data.getName().toUri())
+        logging.debug("\tContent: " + data.getContent().toRawStr())
 
         # Extract info from data packet
         payload = json.loads(data.getContent().toRawStr())
@@ -85,15 +84,15 @@ class Consumer(object):
         if pir.status.addData(timestamp, pirVal):
             self._callbackCountUniqueData += 1
 
-        logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
+        logging.info("pir " + str(pirId) + " " + str(pirVal) + " at " + str(timestamp))
         self.controlTV()
 
     def onTimeoutPir(self, interest):
         self._callbackCountTimeout += 1
-        logging.info("Timeout interest: " + interest.getName().toUri())
+        logging.debug("Timeout interest: " + interest.getName().toUri())
 
     def expressInterestPirAndRepeat(self):
-        logging.info("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + "callbackCountTimeout: " + str(self._callbackCountTimeout))
+        logging.debug("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + ", callbackCountTimeout: " + str(self._callbackCountTimeout))
 
         # Express interest for each pir we have discovered
         pirs = [ x for x in self._remoteDevices ]
@@ -105,9 +104,9 @@ class Consumer(object):
 
             self._face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
             self._countExpressedInterests += 1
-            logging.info("Sent interest: " + interest.getName().toUri())
-            logging.info("\tExclude: " + interest.getExclude().toUri())
-            logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
+            logging.debug("Sent interest: " + interest.getName().toUri())
+            logging.debug("\tExclude: " + interest.getExclude().toUri())
+            logging.debug("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
  
         # Reschedule again in 0.5 sec
         self._loop.call_later(0.5, self.expressInterestPirAndRepeat)
@@ -120,6 +119,7 @@ class Consumer(object):
                 count += 1
         if count >= 2:
             # TODO: Send command interest to TV
+            logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
             logging.info("turn on tv")
         
 
