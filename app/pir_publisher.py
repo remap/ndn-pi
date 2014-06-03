@@ -2,7 +2,7 @@ import time
 from pyndn import Name
 from pyndn import Interest
 from pyndn import Data
-from pyndn import Face
+from pyndn import ThreadsafeFace
 from pyndn.security import KeyChain
 
 import subprocess
@@ -12,13 +12,19 @@ from util.common import Common
 import struct
 import json
 
+try:
+    import asyncio
+except ImportError:
+    import trollius as asyncio
+
 class PirPublisher(object):
     def __init__(self):
         self._serial = Common.getSerial()
         self._pir = Pir(12)
         self._prevPirVal = self._pir.read()
 
-        self._face = Face("localhost")
+        self._loop = asyncio.get_event_loop()
+        self._face = ThreadsafeFace(self._loop, "localhost")
         self._keyChain = KeyChain()
         self._certificateName = self._keyChain.getDefaultCertificateName()
         self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
@@ -75,11 +81,7 @@ class PirPublisher(object):
         print "Register failed for prefix", prefix.toUri()
 
     def run(self):
-        while True:
-            self._face.processEvents()
-            # We need to sleep for a few milliseconds so we don't use 100% of the CPU.
-            time.sleep(0.01)    
-
+        self._loop.run_forever()
         self._face.shutdown()
 
 if __name__ == "__main__":
