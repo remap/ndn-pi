@@ -1,9 +1,12 @@
-import asyncio
 from pyndn import Name
 from pyndn import Interest
 from pyndn import Exclude
 from pyndn import ThreadsafeFace
 
+try:
+    import asyncio
+except ImportError:
+    import trollius as asyncio
 import time
 import json
 from app.remote_device import RemoteDevice
@@ -49,12 +52,12 @@ class Consumer(object):
 
     def expressDiscoveryInterest(self, interest):
         self._face.expressInterest(interest, self.onDataDiscovery, self.onTimeoutDiscovery)
-        logging.info("Sent interest: " + interest.getName().toUri())
-        logging.info("\tExclude: " + interest.getExclude().toUri())
-        logging.info("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
+        logging.debug("Sent interest: " + interest.getName().toUri())
+        logging.debug("\tExclude: " + interest.getExclude().toUri())
+        logging.debug("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
 
     def initDiscovery(self):
-        logging.info("Begin discovery")
+        logging.info("Begin discovery, issue discovery interest for \"/home/dev\"")
         interest = Interest(Name("/home/dev"))
         interest.setInterestLifetimeMilliseconds(4000.0)
         interest.setMinSuffixComponents(2)
