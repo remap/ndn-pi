@@ -21,6 +21,7 @@ class PirPublisher(object):
     def __init__(self):
         self._serial = Common.getSerial()
         self._pir = Pir(12)
+        self._prevTimestamp = int(time.time() * 1000) # in milliseconds
         self._prevPirVal = self._pir.read()
 
         self._loop = asyncio.get_event_loop()
@@ -53,15 +54,28 @@ class PirPublisher(object):
     def onInterestPir(self, prefix, interest, transport, registeredPrefixId):
         pirVal = self._pir.read()
 
-        # CHECK EXCLUDE FILTER
-        # TODO: if interest exclude doesn't match timestamp from last tx'ed data
+        # If interest exclude doesn't match timestamp from last tx'ed data
         # then resend data
+        if not interest.getExclude().matches(str(self._prevTimestamp)):
+            data = Data(Name(prefix).append(self._serial + str(12)).append(str(self._prevTimestamp)))
 
+            payload = { "pir" : self._prevPirVal, "count" : self._count }
+            content = json.dumps(payload)
+            data.setContent(content)
+
+            data.getMetaInfo().setFreshnessPeriod(1000) # 1 second, in milliseconds
+
+            self._keyChain.sign(data, self._certificateName)
+            encodedData = data.wireEncode()
+            transport.send(encodedData.toBuffer())
+            print "Sent data:", data.getName().toUri(), "with content", content
+
+        # 
         if pirVal != self._prevPirVal:
             timestamp = int(time.time() * 1000) # in milliseconds
             data = Data(Name(prefix).append(self._serial + str(12)).append(str(timestamp)))
 
-            payload = { "pir" : pirVal, "count" : self._count, "src" : "1" }
+            payload = { "pir" : pirVal, "count" : self._count }
             content = json.dumps(payload)
             data.setContent(content)
 
@@ -74,6 +88,7 @@ class PirPublisher(object):
 
             # TODO: Save last data
 
+            self._prevTimestamp
             self._prevPirVal = pirVal
             self._count += 1
 
