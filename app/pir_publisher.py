@@ -34,7 +34,7 @@ class PirPublisher(object):
         self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
 
         self._face.registerPrefix(Name("/home/dev"), self.onInterestDev, self.onRegisterFailed)
-        self._face.registerPrefix(Name("/home/pir"), self.onInterestPir, self.onRegisterFailed)
+        self._face.registerPrefix(Name("/home/pir").append(self._serial + str(12)), self.onInterestPir, self.onRegisterFailed)
 
         self._count = 0
         
@@ -60,7 +60,9 @@ class PirPublisher(object):
         # If interest exclude doesn't match timestamp from last tx'ed data
         # then resend data
         if not interest.getExclude().matches(Name.Component(str(self._prevTimestamp))):
-            data = Data(Name(prefix).append(self._serial + str(12)).append(str(self._prevTimestamp)))
+            print "Received interest without exclude ACK:", interest.getExclude().toUri()
+            print "\tprevious timestamp:", str(self._prevTimestamp)
+            data = Data(Name(prefix).append(str(self._prevTimestamp)))
 
             payload = { "pir" : self._prevPirVal, "count" : self._count }
             content = json.dumps(payload)
@@ -76,7 +78,7 @@ class PirPublisher(object):
         # 
         if pirVal != self._prevPirVal:
             timestamp = int(time.time() * 1000) # in milliseconds
-            data = Data(Name(prefix).append(self._serial + str(12)).append(str(timestamp)))
+            data = Data(Name(prefix).append(str(timestamp)))
 
             payload = { "pir" : pirVal, "count" : self._count }
             content = json.dumps(payload)
