@@ -11,11 +11,14 @@ from sensors.pir import Pir
 from util.common import Common
 import struct
 import json
+import logging
 
 try:
     import asyncio
 except ImportError:
     import trollius as asyncio
+
+logging.basicConfig(level=logging.INFO)
 
 class PirPublisher(object):
     def __init__(self):
@@ -56,7 +59,7 @@ class PirPublisher(object):
 
         # If interest exclude doesn't match timestamp from last tx'ed data
         # then resend data
-        if not interest.getExclude().matches(str(self._prevTimestamp)):
+        if not interest.getExclude().matches(Name.Component(str(self._prevTimestamp))):
             data = Data(Name(prefix).append(self._serial + str(12)).append(str(self._prevTimestamp)))
 
             payload = { "pir" : self._prevPirVal, "count" : self._count }
@@ -88,7 +91,7 @@ class PirPublisher(object):
 
             # TODO: Save last data
 
-            self._prevTimestamp
+            self._prevTimestamp = timestamp
             self._prevPirVal = pirVal
             self._count += 1
 
