@@ -20,40 +20,61 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO)
 
-class PirPublisher(object):
-    def __init__(self):
+class Discoveree(object):
+    def __init__(self, loop, face, keyChain):
         self._serial = Common.getSerial()
-        self._pir = Pir(12)
-        self._prevTimestamp = int(time.time() * 1000) # in milliseconds
-        self._prevPirVal = self._pir.read()
-
-        self._loop = asyncio.get_event_loop()
-        self._face = ThreadsafeFace(self._loop, "localhost")
-        self._keyChain = KeyChain()
-        self._certificateName = self._keyChain.getDefaultCertificateName()
-        self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
-
+        self._loop = loop
+        self._face = face
+        self._keyChain = keyChain
+        self._functions = []
         self._face.registerPrefix(Name("/home/dev"), self.onInterestDev, self.onRegisterFailed)
-        self._face.registerPrefix(Name("/home/pir").append(self._serial + str(12)), self.onInterestPir, self.onRegisterFailed)
 
-        self._count = 0
-        
     def onInterestDev(self, prefix, interest, transport, registeredPrefixId):
-        print "Recv interest:", interest.getName().toUri(), "at prefix", prefix.toUri()
-        # TODO: Check exclude filter
-        
+        print "Recv interest:", interest.getName().toUri(), "at prefix:", prefix.toUri()
+        print "\texclude:", interest.getExclude().toUri()
+        if interest.getExclude().matches(Name.Component(self._serial)):
+            print "Discard interest, we are excluded already"
+            return
+
         data = Data(Name(prefix).append(self._serial))
 
-        payload = { "functions" : [{ "type" : "pir", "id" : str(self._serial) + str(12) }] }   # TODO: self._pir.getPin()
+        payload = { "functions" : self._functions }
         content = json.dumps(payload)
         data.setContent(content)
 
         data.getMetaInfo().setFreshnessPeriod(4000) # 4 seconds, in milliseconds
 
-        self._keyChain.sign(data, self._certificateName)
+        self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
         encodedData = data.wireEncode()
         transport.send(encodedData.toBuffer())
 
+    def onRegisterFailed(self, prefix):
+        print "Register failed for prefix", prefix.toUri()
+
+    def addFunction(self, type, id):
+        self._functions.append({ "type" : type, "id" : id })
+
+    def removeFunction(self, type, id):
+        raise RuntimeError("removeFunction is not implemented")
+
+
+class PirPublisher(object):
+    def __init__(self, loop, face, keyChain, discoveree, pirPin):
+        self._pir = Pir(pirPin)
+        self._pirId = Common.getSerial() + str(self._pir.getPin())
+        self._prevTimestamp = int(time.time() * 1000) # in milliseconds
+        self._prevPirVal = self._pir.read()
+
+        self._loop = loop
+        self._face = face
+        self._keyChain = keyChain
+
+        discoveree.addFunction("pir", self._pirId)
+
+        self._face.registerPrefix(Name("/home/pir").append(self._pirId), self.onInterestPir, self.onRegisterFailed)
+
+        self._count = 0
+        
     def onInterestPir(self, prefix, interest, transport, registeredPrefixId):
         pirVal = self._pir.read()
 
@@ -70,7 +91,7 @@ class PirPublisher(object):
 
             data.getMetaInfo().setFreshnessPeriod(1000) # 1 second, in milliseconds
 
-            self._keyChain.sign(data, self._certificateName)
+            self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
             encodedData = data.wireEncode()
             transport.send(encodedData.toBuffer())
             print "Sent data:", data.getName().toUri(), "with content", content
@@ -86,7 +107,7 @@ class PirPublisher(object):
 
             data.getMetaInfo().setFreshnessPeriod(1000) # 1 second, in milliseconds
 
-            self._keyChain.sign(data, self._certificateName)
+            self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
             encodedData = data.wireEncode()
             transport.send(encodedData.toBuffer())
             print "Sent data:", data.getName().toUri(), "with content", content
@@ -100,10 +121,13 @@ class PirPublisher(object):
     def onRegisterFailed(self, prefix):
         print "Register failed for prefix", prefix.toUri()
 
-    def run(self):
-        self._loop.run_forever()
-        self._face.shutdown()
-
 if __name__ == "__main__":
-    pirPublisher = PirPublisher()
-    pirPublisher.run()
+    loop = asyncio.get_event_loop()
+    face = ThreadsafeFace(loop, "localhost")
+    keyChain = KeyChain()
+    face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName())
+    discoveree = Discoveree(loop, face, keyChain)
+    pirPublisher = PirPublisher(loop, face, keyChain, discoveree, 12)
+    pirPublisher = PirPublisher(loop, face, keyChain, discoveree, 7)
+    loop.run_forever()
+    face.shutdown()
