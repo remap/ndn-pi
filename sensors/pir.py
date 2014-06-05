@@ -8,6 +8,9 @@ class Pir():
         gpio.setmode(gpio.BOARD)
         gpio.setup(self._pin, gpio.IN)
 
+    def getPin(self):
+        return self._pin
+
     def read(self):
         return bool(gpio.input(self._pin))
 
