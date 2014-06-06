@@ -11,7 +11,7 @@ import time
 import json
 from app.remote_device import RemoteDevice
 import logging
-logging.basicConfig(filename="async.log", level=logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 class Consumer(object):
     def __init__(self):
