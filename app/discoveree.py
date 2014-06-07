@@ -16,6 +16,7 @@ class Discoveree(object):
         self._serial = Common.getSerial()
         self._functions = []
 
+        # Register /home/dev to listen for discovery interests
         self._face.registerPrefix(Name("/home/dev"), self.onInterestDev, self.onRegisterFailed)
 
     def onInterestDev(self, prefix, interest, transport, registeredPrefixId):

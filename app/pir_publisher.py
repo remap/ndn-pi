@@ -19,13 +19,12 @@ class PirPublisher(object):
         self._pirId = Common.getSerial() + str(self._pir.getPin())
         self._prevTimestamp = int(time.time() * 1000) # in milliseconds
         self._prevPirVal = self._pir.read()
+        self._count = 0
 
         discoveree.addFunction("pir", self._pirId)
 
         self._face.registerPrefix(Name("/home/pir").append(self._pirId), self.onInterestPir, self.onRegisterFailed)
 
-        self._count = 0
-        
     def onInterestPir(self, prefix, interest, transport, registeredPrefixId):
         pirVal = self._pir.read()
 
