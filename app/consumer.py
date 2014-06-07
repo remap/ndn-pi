@@ -2,14 +2,13 @@ from pyndn import Name
 from pyndn import Interest
 from pyndn import Exclude
 from pyndn import ThreadsafeFace
-
+from pyndn.security import KeyChain
+from app.remote_device import RemoteDevice
 try:
     import asyncio
 except ImportError:
     import trollius as asyncio
-import time
 import json
-from app.remote_device import RemoteDevice
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -19,10 +18,17 @@ class Consumer(object):
         self._callbackCountData = 0
         self._callbackCountUniqueData = 0
         self._callbackCountTimeout = 0
+
         self._loop = asyncio.get_event_loop()
         self._face = ThreadsafeFace(self._loop, "localhost")
+        self._keyChain = KeyChain()
+        self._certificateName = self._keyChain.getDefaultCertificateName()
+        self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
+
         self._remoteDevices = []
 
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        self._oneTimeoutAlready = False
 
     # Discovery
     def onDataDiscovery(self, interest, data):
@@ -48,7 +54,16 @@ class Consumer(object):
         logging.debug("Timeout interest: " + interest.getName().toUri())
         logging.info("Discovery complete, rescheduling again in 600 seconds")
         logging.info("Devices discovered: " + str(self._remoteDevices))
-        self._loop.call_later(600, self.initDiscovery)
+
+        # TODO: NFD hack: uncomment once NFD forwarding fixed
+        # self._loop.call_later(600, self.initDiscovery)
+
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        if self._oneTimeoutAlready:
+            self._oneTimeoutAlready = False
+            self._loop.call_later(600, self.initDiscovery)
+        else:
+            self._oneTimeoutAlready = True
 
     def expressDiscoveryInterest(self, interest):
         self._face.expressInterest(interest, self.onDataDiscovery, self.onTimeoutDiscovery)
@@ -65,6 +80,13 @@ class Consumer(object):
         # includes implicit digest so to match "/home/dev/<dev-id>" must have 2 components
 
         # Express initial discovery interest
+        self.expressDiscoveryInterest(interest)
+
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        interest = Interest(Name("/home/localdev"))
+        interest.setInterestLifetimeMilliseconds(4000.0)
+        interest.setMinSuffixComponents(2)
+        interest.setMaxSuffixComponents(2)
         self.expressDiscoveryInterest(interest)
 
 
@@ -98,7 +120,7 @@ class Consumer(object):
         logging.debug("callbackCountUniqueData: " + str(self._callbackCountUniqueData) + ", callbackCountTimeout: " + str(self._callbackCountTimeout))
 
         # Express interest for each pir we have discovered
-        pirs = [ x for x in self._remoteDevices ]
+        pirs = [ x for x in self._remoteDevices if x.type == "pir" ]
         for pir in pirs:
             interest = Interest(Name("/home/pir").append(pir.id))
             interest.setExclude(pir.status.getExclude())
@@ -114,9 +136,18 @@ class Consumer(object):
         # Reschedule again in 0.5 sec
         self._loop.call_later(0.5, self.expressInterestPirAndRepeat)
 
+
+    # Cec Control
+    def onDataCec(self, interest, data):
+        print "onDataCec"
+
+    def onTimeoutCec(self, interest):
+        print "onTimeoutCec"
+
     def controlTV(self):
         count = 0
         pirs = [ x for x in self._remoteDevices if x.type == "pir" ]
+        cecs = [ x for x in self._remoteDevices if x.type == "cec" ]
         for pir in pirs:
             if pir.status.getLastValue():
                 count += 1
@@ -124,6 +155,11 @@ class Consumer(object):
             # TODO: Send command interest to TV
             logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
             logging.info("turn on tv")
+            for cec in cecs:
+                # TODO: change .append("play") to be TLV
+                interest = Interest(Name("/home/cec").append(cec.id).append("play"))
+                # self._face.makeCommandInterest(interest)
+                self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
         
 
     # Set up all async function calls
