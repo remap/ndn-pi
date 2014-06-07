@@ -1,6 +1,9 @@
 from pyndn import ThreadsafeFace
 from pyndn.security import KeyChain
-from app.discoveree import Discoveree
+# TODO: NFD hack: uncomment once NFD forwarding fixed
+# from app.discoveree import Discoveree
+# TODO: NFD hack: remove once NFD forwarding fixed
+from app.local_discoveree import LocalDiscoveree
 from app.cec_tv import CecTv
 try:
     import asyncio
@@ -15,7 +18,10 @@ def main():
     keyChain = KeyChain()
     face.setCommandSigningInfo(keyChain, keyChain.getDefaultCertificateName())
 
-    discoveree = Discoveree(loop, face, keyChain)
+    # TODO: NFD hack: uncomment once NFD forwarding fixed
+    # discoveree = Discoveree(loop, face, keyChain)
+    # TODO: NFD hack: remove once NFD forwarding fixed
+    discoveree = LocalDiscoveree(loop, face, keyChain)
 
     cecTv = CecTv(loop, face, keyChain, discoveree)
 

@@ -27,6 +27,9 @@ class Consumer(object):
 
         self._remoteDevices = []
 
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        self._oneTimeoutAlready = False
+
     # Discovery
     def onDataDiscovery(self, interest, data):
         logging.debug("Received data: " + data.getName().toUri())
@@ -51,7 +54,16 @@ class Consumer(object):
         logging.debug("Timeout interest: " + interest.getName().toUri())
         logging.info("Discovery complete, rescheduling again in 600 seconds")
         logging.info("Devices discovered: " + str(self._remoteDevices))
-        self._loop.call_later(600, self.initDiscovery)
+
+        # TODO: NFD hack: uncomment once NFD forwarding fixed
+        # self._loop.call_later(600, self.initDiscovery)
+
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        if self._oneTimeoutAlready:
+            self._oneTimeoutAlready = False
+            self._loop.call_later(600, self.initDiscovery)
+        else:
+            self._oneTimeoutAlready = True
 
     def expressDiscoveryInterest(self, interest):
         self._face.expressInterest(interest, self.onDataDiscovery, self.onTimeoutDiscovery)
@@ -68,6 +80,13 @@ class Consumer(object):
         # includes implicit digest so to match "/home/dev/<dev-id>" must have 2 components
 
         # Express initial discovery interest
+        self.expressDiscoveryInterest(interest)
+
+        # TODO: NFD hack: remove once NFD forwarding fixed
+        interest = Interest(Name("/home/localdev"))
+        interest.setInterestLifetimeMilliseconds(4000.0)
+        interest.setMinSuffixComponents(2)
+        interest.setMaxSuffixComponents(2)
         self.expressDiscoveryInterest(interest)
 
 
