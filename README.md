@@ -12,14 +12,17 @@ Required: [libcec](https://github.com/Pulse-Eight/libcec)
 Running
 ---
 Make sure you've already done:
+
    export PYTHONPATH=$PYTHONPATH:<PyNDN root>/python
 
 On pir pi:
+
   nfd-start
   nfdc register /home 2
   sudo python app/occupancy_node_1.py
 
 On consumer/cec pi:
+
   nfd-start
   nfdc register /home 3
   python app/hdmi_cec_node.py (either in separate terminal or background)
