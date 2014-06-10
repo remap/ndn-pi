@@ -13,20 +13,20 @@ Running
 ---
 Make sure you've already done:
 
-   export PYTHONPATH=$PYTHONPATH:<PyNDN root>/python
+    export PYTHONPATH=$PYTHONPATH:<PyNDN root>/python
 
 On pir pi:
 
-  nfd-start
-  nfdc register /home 2
-  sudo python app/occupancy_node_1.py
+    nfd-start
+    nfdc register /home 2
+    sudo python app/occupancy_node_1.py
 
 On consumer/cec pi:
 
-  nfd-start
-  nfdc register /home 3
-  python app/hdmi_cec_node.py (either in separate terminal or background)
-  python app/consumer.py
+    nfd-start
+    nfdc register /home 3
+    python app/hdmi_cec_node.py (either in separate terminal or background)
+    python app/consumer.py
 
 Note about nfdc register command
 <faceId> is the udp multicast face, which can be attained via nfd-status - it's the line with udp4://224.0.23.170:56363
