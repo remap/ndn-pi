@@ -3,11 +3,11 @@ ndn-pi
 
 Prerequisites
 -------------
-Required: Python 2.7 or later
-Required: [NFD](https://github.com/named-data/NFD)
-Required: [PyNDN2](https://github.com/named-data/PyNDN2)
-Required: trollius (for asyncio in Python 2.7)
-Required: [libcec](https://github.com/Pulse-Eight/libcec)
+* Required: Python 2.7 or later
+* Required: [NFD](https://github.com/named-data/NFD)
+* Required: [PyNDN2](https://github.com/named-data/PyNDN2)
+* Required: trollius (for asyncio in Python 2.7)
+* Required: [libcec](https://github.com/Pulse-Eight/libcec)
 
 Running
 ---
