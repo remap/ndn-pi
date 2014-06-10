@@ -28,7 +28,8 @@ On consumer/cec pi:
     python app/hdmi_cec_node.py (either in separate terminal or background)
     python app/consumer.py
 
-Note about nfdc register command
-<faceId> is the udp multicast face, which can be attained via nfd-status - it's the line with udp4://224.0.23.170:56363
-For the gateway, it's 3
-For non-gateways, it's 2
+Note about `nfdc register <prefix> <faceId>`:
+
+`<faceId>` should be the udp multicast face, which can be attained via nfd-status - it's the line with `udp4://224.0.23.170:56363`
+
+Typically, for the gateway (because it has 2 IP addresses), faceId=3, for non-gateways, faceId=2.
