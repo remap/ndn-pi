@@ -4,6 +4,9 @@ from pyndn import Exclude
 from pyndn import ThreadsafeFace
 from pyndn.security import KeyChain
 from app.remote_device import RemoteDevice
+# This include is produced by:
+# protoc --python_out=. cec_messages.proto
+import app.cec_messages_pb2 as pb
 try:
     import asyncio
 except ImportError:
@@ -158,6 +161,14 @@ class Consumer(object):
             for cec in cecs:
                 # TODO: change .append("play") to be TLV
                 interest = Interest(Name("/home/cec").append(cec.id).append("play"))
+                # message = pb.CommandMessage()
+                # message.destination = pb.TV
+                # message.commands.append(pb.AS)
+                # message.commands.append(pb.SLEEP)
+                # message.commands.append(pb.SLEEP)
+                # message.commands.append(pb.YOUSHALLNOTPASS)
+                # encodedMessage = ProtobufTlv.encode(message)
+                # interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
                 # self._face.makeCommandInterest(interest)
                 self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
         
