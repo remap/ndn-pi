@@ -19,9 +19,8 @@
 
 import RPi.GPIO as gpio
 from time import sleep
-import sys
 
-class Led():
+class Led(object):
     def __init__(self, pin):
         self._pin = pin
         gpio.setmode(gpio.BOARD)
@@ -31,10 +30,7 @@ class Led():
         gpio.output(self._pin, val)
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print """Usage: python led.py <pin>
-<pin>  pin number of led according to board numbering system (P1-##)"""
-    led = Led(int(sys.argv[1]))
+    led = Led(11)
     led.set(False)
     sleep(2)
     led.set(True)

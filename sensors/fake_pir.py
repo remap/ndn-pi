@@ -18,8 +18,9 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 import random
+from time import sleep
 
-class FakePir():
+class FakePir(object):
     def __init__(self, pin):
         self._pin = pin
         self._prevVal = False
