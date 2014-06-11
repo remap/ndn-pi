@@ -3,6 +3,7 @@ from pyndn import Interest
 from pyndn import Exclude
 from pyndn import ThreadsafeFace
 from pyndn.security import KeyChain
+from pyndn.encoding import ProtobufTlv
 from app.remote_device import RemoteDevice
 # This include is produced by:
 # protoc --python_out=. cec_messages.proto
@@ -159,16 +160,28 @@ class Consumer(object):
             logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
             logging.info("turn on tv")
             for cec in cecs:
-                # TODO: change .append("play") to be TLV
-                interest = Interest(Name("/home/cec").append(cec.id).append("play"))
-                # message = pb.CommandMessage()
-                # message.destination = pb.TV
-                # message.commands.append(pb.AS)
-                # message.commands.append(pb.SLEEP)
-                # message.commands.append(pb.SLEEP)
-                # message.commands.append(pb.YOUSHALLNOTPASS)
-                # encodedMessage = ProtobufTlv.encode(message)
-                # interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
+                message = pb.CommandMessage()
+                message.destination = pb.TV
+                message.commands.append(pb.AS)
+                message.commands.append(pb.SLEEP)
+                message.commands.append(pb.SLEEP)
+                message.commands.append(pb.PLAY)
+                encodedMessage = ProtobufTlv.encode(message)
+                interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
+                # interest = Interest(Name("/home/cec").append(cec.id).append("play"))
+                # self._face.makeCommandInterest(interest)
+                self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
+        elif count == 0:
+            # TODO: Send command interest to TV
+            logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
+            logging.info("turn off tv")
+            for cec in cecs:
+                message = pb.CommandMessage()
+                message.destination = pb.TV
+                message.commands.append(pb.STANDBY)
+                encodedMessage = ProtobufTlv.encode(message)
+                interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
+                # interest = Interest(Name("/home/cec").append(cec.id).append("play"))
                 # self._face.makeCommandInterest(interest)
                 self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
         

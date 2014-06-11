@@ -25,7 +25,8 @@ enum Command {
   RIGHT = 10;
   AS = 11;
   SLEEP = 12;
-  YOUSHALLNOTPASS = 13;
+  TVMENU = 13;
+  DVDMENU = 14;
 }
 
 message DevicesCapabilitiesMessage {
