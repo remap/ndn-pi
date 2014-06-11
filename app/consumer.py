@@ -115,7 +115,6 @@ class Consumer(object):
                 self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
         elif count == 0:
             # TODO: Send command interest to TV
-            logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
             logging.info("turn off tv")
             for cec in self._deviceManager.getCecs():
                 message = pb.CommandMessage()
