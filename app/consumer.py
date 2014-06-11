@@ -20,6 +20,10 @@
 from pyndn import Name
 from pyndn import Interest
 from pyndn import Exclude
+from pyndn.encoding import ProtobufTlv
+# This include is produced by:
+# protoc --python_out=. cec_messages.proto
+import app.cec_messages_pb2 as pb
 import json
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -98,7 +102,27 @@ class Consumer(object):
             # TODO: Send command interest to TV
             logging.info("turn on tv")
             for cec in self._deviceManager.getCecs():
-                # TODO: change .append("play") to be TLV
-                interest = Interest(Name("/home/cec").append(cec.id).append("play"))
+                message = pb.CommandMessage()
+                message.destination = pb.TV
+                message.commands.append(pb.AS)
+                message.commands.append(pb.SLEEP)
+                message.commands.append(pb.SLEEP)
+                message.commands.append(pb.PLAY)
+                encodedMessage = ProtobufTlv.encode(message)
+                interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
+                # interest = Interest(Name("/home/cec").append(cec.id).append("play"))
+                # self._face.makeCommandInterest(interest)
+                self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
+        elif count == 0:
+            # TODO: Send command interest to TV
+            logging.info("STATUSES: " + str(self._remoteDevices)) # TODO: Cleanup
+            logging.info("turn off tv")
+            for cec in self._deviceManager.getCecs():
+                message = pb.CommandMessage()
+                message.destination = pb.TV
+                message.commands.append(pb.STANDBY)
+                encodedMessage = ProtobufTlv.encode(message)
+                interest = Interest(Name("/home/cec").append(cec.id).append(encodedMessage))
+                # interest = Interest(Name("/home/cec").append(cec.id).append("play"))
                 # self._face.makeCommandInterest(interest)
                 self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)

@@ -1,0 +1,44 @@
+// Compile this file using:
+// protoc --python_out=. cec_messages.proto
+
+package ndn_pi_message;
+
+enum Device {
+  TV = 0;
+  RECORDING_1 = 1;
+  PLAYBACK_1 = 4;
+  RESERVED_E = 14;
+  BROADCAST = 15;
+}
+
+enum Command {
+  STANDBY = 0;
+  ON = 1;
+  PLAY = 2;
+  PAUSE = 3;
+  FF = 4;
+  RW = 5;
+  SEL = 6;
+  UP = 7;
+  DOWN = 8;
+  LEFT = 9;
+  RIGHT = 10;
+  AS = 11;
+  SLEEP = 12;
+  TVMENU = 13;
+  DVDMENU = 14;
+}
+
+message DevicesCapabilitiesMessage {
+  message DeviceCapabilities {
+    required Device device = 1;
+    repeated Command capabilities = 2;
+  }
+
+  repeated DeviceCapabilities deviceCapabilities = 1;
+}
+
+message CommandMessage {
+  required Device destination = 1;
+  repeated Command commands = 2;
+}
