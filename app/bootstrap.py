@@ -17,11 +17,6 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # A copy of the GNU General Public License is in the file COPYING.
 
-from 2-publisher-command-interest.publish_pir import PirDataLogger
-
-# TODO: don't hardcode, instead get from command interest
-nodeType = "pir"
-
 def onDataGWInit(interest, data):
     pass
     # verify data is signed by barcode
@@ -34,11 +29,16 @@ def onTimeout(interest):
     pass
     # resend interest once or twice?
 
-# Some of these function args are probably not necessary
+# device registers prefix, waits
+# gateway initiates discovery, device responds with key
+# this doesn't integrate perfectly with existing discovery code in occupancy_node
+# because in existing disc. code, it responds with the attached devices
+# whereas here it responds with key
+# merge this and occupancy_node code
 def onInterest(prefix, interest, transport, registeredPrefixId):
-    # if interest.getName() matches "/home/dev/<serial>/<auth>"
+    # if interest.getName() matches "/home/dev/<dev-id>/<auth>"
         # do we have to verify interest signature?
-        data = Data(Name("/home/dev/<serial>/<auth>"))
+        data = Data(Name("/home/dev/<dev-id>/<auth>"))
         data.setContent(public key)
         # send data
         interest = Interest(Name("/home/gw").append(<auth>))
@@ -51,15 +51,8 @@ def onRegisterFailed(prefix):
 
 # check for self keys
 # if not keys, generate key for self
-prefix = Name("/home/dev").append(serial)
+prefix = Name("/home/dev").append(<dev-id>)
 face.registerPrefix(prefix, onInterest, onRegisterFailed)
 
 # listen for <prefix> (will come from gateway)
 
-# listen for <prefix>/command/pir/on or <prefix>/command/cec/off, etc.
-if nodeType == "pir":
-    logger = PirDataLogger(data_interval = 0.5) # sample at every 0.5 seconds (also affects face.processEvents)
-    logger.run()
-elif nodeType == "cec":
-    # TODO: implement
-    print "CEC stuff"

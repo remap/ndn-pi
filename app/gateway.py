@@ -17,7 +17,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # A copy of the GNU General Public License is in the file COPYING.
 
-def asdf():
+def sign():
     signature = hash data, timestamp, random number, AND secret barcode
     append signature to message
 
@@ -65,10 +65,3 @@ face.expressInterest(interest, onDataDevInit, onTimeout)
 
 # listen for <prefix> (will come from gateway)
 
-# listen for <prefix>/command/pir/on or <prefix>/command/cec/off, etc.
-if nodeType == "pir":
-    logger = PirDataLogger(data_interval = 0.5) # sample at every 0.5 seconds (also affects face.processEvents)
-    logger.run()
-elif nodeType == "cec":
-    # TODO: implement
-    print "CEC stuff"
