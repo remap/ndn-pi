@@ -1,0 +1,7 @@
+Set trust-anchor directories
+Call ndnsec where appropriate
+Add/remove validator rules for command interests
+Fix Cancel in interest editor:
+    edit a clone, replace if not cancel
+
+
