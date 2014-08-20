@@ -30,25 +30,26 @@ format used in ndn-cxx.
 class BoostInfoTree(object):
     def __init__(self, value = None, parent = None):
         super(BoostInfoTree, self).__init__()
-        self.subTrees = OrderedDict()
+        self.subtrees = OrderedDict()
         self.value = value
         self.parent = parent
 
         self.lastChild = None
 
     def clone(self):
+
         copy = BoostInfoTree(self.value)
-        for subTreeName, subTrees in self.subTrees.items():
-            for t in subTrees:
+        for subtreeName, subtrees in self.subtrees.items():
+            for t in subtrees:
                 newTree = t.clone()
-                copy.addSubtree(subTreeName, newTree)
+                copy.addSubtree(subtreeName, newTree)
         return copy
 
     def addSubtree(self, treeName, newTree):
-        if treeName in self.subTrees:
-            self.subTrees[treeName].append(newTree)
+        if treeName in self.subtrees:
+            self.subtrees[treeName].append(newTree)
         else:
-            self.subTrees[treeName] = [newTree]
+            self.subtrees[treeName] = [newTree]
         newTree.parent = self
         self.lastChild = newTree
 
@@ -63,13 +64,13 @@ class BoostInfoTree(object):
         if len(key) == 0:
             return [self]
 
-        subTrees = self.subTrees[path[0]]
+        subtrees = self.subtrees[path[0]]
         if len(path) == 1:
-            return subTrees
+            return subtrees
 
         newPath = '/'.join(path[1:])
         foundVals = []
-        for t in subTrees:
+        for t in subtrees:
             foundVals.extend(t.__getitem__(newPath))
         return foundVals
 
@@ -83,13 +84,13 @@ class BoostInfoTree(object):
             if self.value is not None and len(self.value) > 0:
                 s += "\"" + str(self.value) + "\""
             s+= "\n" 
-        if len(self.subTrees) > 0:
+        if len(self.subtrees) > 0:
             if self.parent is not None:
                 s += prefix+ "{\n"
             nextLevel = " "*(indentLevel+2)
-            for t in self.subTrees:
-                for subTree in self.subTrees[t]:
-                    s += nextLevel + str(t) + " " + subTree._prettyprint(indentLevel+2)
+            for t in self.subtrees:
+                for subtree in self.subtrees[t]:
+                    s += nextLevel + str(t) + " " + subtree._prettyprint(indentLevel+2)
             if self.parent is not None:
                 s +=  prefix + "}\n"
         return s

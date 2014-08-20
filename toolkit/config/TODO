@@ -1,7 +1,8 @@
-Set trust-anchor directories
-Call ndnsec where appropriate
-Add/remove validator rules for command interests
-Fix Cancel in interest editor:
-    edit a clone, replace if not cancel
+Current version:
+*Call ndnsec where appropriate
 
+Next version:
+*Add/remove validator rules for command interests
+    - maybe next version: use # of parameters etc
+*Specify refresh interval for trust anchor certificate directories
 

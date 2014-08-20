@@ -24,19 +24,18 @@ from boost_info_parser import BoostInfoParser, BoostInfoTree
 import sys
 import itertools
 import re
+from subprocess import Popen, PIPE
+from subprocess import call as system_call
 import os
 
-# TODO: return a boolean retry from menu options?
 
 class ConfigManager(Dialog):
     def __init__(self, fileName):
         super(ConfigManager, self).__init__()
         self.currentConfig = BoostInfoParser()
-        self.configTemplate = BoostInfoParser()
 
         pathName = os.path.dirname(os.path.abspath(__file__))
-        baseFile = os.path.join(pathName, '.base.conf')
-        self.configTemplate.read(baseFile)
+        self.baseFile = os.path.join(pathName, '.base.conf')
 
         if fileName is None:
             self.inputFile = None
@@ -57,7 +56,7 @@ class ConfigManager(Dialog):
 
         self.optionsList = (('Edit newtork name settings', self.editNameInformation),
                             ('Set certificate search directories', self.setCertDirectories), 
-                            ('Regenerate certificate', self.regenerateCertificate),
+                            ('Regenerate device certificate', self.regenerateCertificate),
                             ('Edit command list', self.configureCommands),
                             ('Save configuration', self.saveConfig), 
                             ('Load configuration', self.loadConfig),
@@ -65,16 +64,9 @@ class ConfigManager(Dialog):
                             ('Quit', self.quit))
 
     def importDefaults(self):
-        # don't copy the template section
-        configRoot = self.currentConfig.getRoot()
-
-        deviceSettings = self.configTemplate["device"][0].clone()
-        configRoot.addSubtree("device", deviceSettings)
-        
-        validatorSettings = self.configTemplate["validator"][0].clone()
-        configRoot.addSubtree("validator", validatorSettings)
-
-        self.updateCertificateTrustRule()
+        self.currentConfig.read(self.baseFile)
+        self.updateTrustRules()
+        self.createCertificateIfNecessary()
 
     ###
     # Simple configuration
@@ -120,27 +112,93 @@ class ConfigManager(Dialog):
             networkPrefixNode.value = '/'+newNetworkPrefix
             deviceNameNode.value = newDeviceName
             controllerNameNode.value = newControllerName
-            self.updateCertificateTrustRule()
+            self.updateTrustRules()
+            self.createCertificateIfNecessary()
             hasChanges = True # should we autosave?
-            
+    
+    #####
+    # Trust/security
+    #####
 
-    def updateCertificateTrustRule(self):
+    def updateTrustRules(self):
         # whenever the controller name changes, we must update the certificate
         # verification rule
-        networkName = self.currentConfig["device/environmentPrefix"][0].getValue()
-        controllerName = self.currentConfig["device/controllerName"][0].getValue()
-        controllerName = '/'.join([networkName, controllerName])
-        #also have to replace it in 'Certificate Trust' rule
+        # when the device name changes, we must update the command interest rule
+        networkName = self.currentConfig["device/environmentPrefix"][0].value
+        deviceSuffix = self.currentConfig["device/deviceName"][0].value
+        deviceName = '/'.join([networkName, deviceSuffix])
+
         trustRules = self.currentConfig["validator/rule"]
         for rule in trustRules:
-            if (rule["for"][0].getValue() == "data" and
-                    rule["id"][0].getValue() == "Certificate Trust"):
-                keyLocatorName = rule["checker/key-locator/name"][0]
-                keyLocatorName.value = controllerName
-                break # should not be more than one matching rule
+            try:
+                keyLocatorInfo = rule["checker/key-locator/name"][0]
+            except KeyError, IndexError:
+                # this rule did not use a key loactor, ignore
+                pass
+            else:
+                keyLocatorInfo.value = networkName
+                if rule["for"][0].value == "interest":
+                    rule["filter/name"][0].value = deviceName
+                    
+
 
     def regenerateCertificate(self):
-        pass
+        # makes a new key the default, but does not delete old keys and certs
+        networkName = self.currentConfig["device/environmentPrefix"][0].value
+        deviceSuffix = self.currentConfig["device/deviceName"][0].value
+        deviceName = '/'.join([networkName, deviceSuffix])
+
+
+    def createCertificateIfNecessary(self):
+        # check ndn-sec output for a certificate for the requested identity
+        # if absent, generate a new cert and put it in ~/.certs
+        networkName = self.currentConfig["device/environmentPrefix"][0].value
+        deviceSuffix = self.currentConfig["device/deviceName"][0].value
+        deviceName = '/'.join([networkName, deviceSuffix])
+        
+        self.alert("Please wait, updating device certificates...", showButtons=False)
+
+        nullFile = open(os.devnull, 'wb')
+
+        # certificate is in stdout of ndnsec commands
+        # save to disk and install if necessary (just generated)
+        userCertDirectory = os.path.expanduser("~/.ndn_iot/certs")
+        fileName = "default{}.cert".format(deviceName.replace('/', '_'))
+        certName = os.path.join(userCertDirectory, fileName)
+        try:
+            os.makedirs(userCertDirectory)
+            # may fail because it exists or can't be made, can't tell
+        except:
+            pass
+
+        
+        proc = Popen(["ndnsec", "cert-dump", "-i", deviceName], stdout=PIPE, 
+                stderr=nullFile)
+        certData, err = proc.communicate()
+        if proc.returncode == 1:
+            # certificate (identity??) not found
+
+            # TODO: why does this make the identity default, but not if typed
+            # directly into the command line?!
+            proc = Popen(["ndnsec" ,"key-gen", "-n", deviceName], stdout=PIPE, 
+                    stderr=nullFile)
+            certData, err = proc.communicate()
+            if proc.returncode == 1:
+                self.alert("ERROR!\nCannot create device certificates!")
+
+        # save to file and install - installing the same cert twice is okay
+        try:
+            certFile = open(certName, 'w')
+            certFile.write(certData)
+            certFile.close()
+            returncode = system_call(["ndnsec-cert-install", certName], 
+                    stdout=nullFile, stderr=nullFile)
+            if returncode != 0:
+                self.alert("ERROR!\nCannot install device certificates!")
+        except IOError:
+            self.alert("ERROR!\nCannot save device certificates!")
+
+        nullFile.close()
 
     ###
     # File management
@@ -197,8 +255,8 @@ class ConfigManager(Dialog):
         fields.append(Dialog.FormField('Requires authentication',  authStr, 0))
         return fields
 
+
     def commandInsertEditForm(self, commandInfo):
-        # Assume we are inserting if the commandInfo is None
         accept = False
         while not accept:
             fields = self.prepareCommandInfoFormFields(commandInfo)
@@ -217,7 +275,7 @@ class ConfigManager(Dialog):
             if retCode == self.DIALOG_EXTRA:
                 # toggle authorization state
                 try:
-                    commandInfo.subTrees.pop('authorize')
+                    commandInfo.subtrees.pop('authorize')
                 except KeyError:
                     #wasn't authorized, authorize now
                     commandInfo.createSubtree('authorize')
@@ -231,7 +289,7 @@ class ConfigManager(Dialog):
                     accept = True
                     #wait - make sure we're not adding something that already exists!
                     try:
-                        allCommands = commandInfo.parent["command"]
+                        allCommands = self.currentConfig["device/command"]
                     except KeyError:
                         # there are no commands anyway
                         pass
@@ -252,7 +310,9 @@ class ConfigManager(Dialog):
         while not exit:
             commandNameList = []
             try:
-                allCommands = self.currentConfig["device/command"]
+                # go straight to the source, not a copy
+                #allCommands = self.currentConfig["device/command"]
+                allCommands = self.currentConfig["device"][0].subtrees["command"]
             except KeyError:
                 commandNameList = [dummyName]
             else:
@@ -270,16 +330,14 @@ class ConfigManager(Dialog):
             retCode, value = self.insertDeleteMenu('', commandNameList, deleteLabel='Delete')
 
             if value == dummyName and (retCode == self.DIALOG_OK or retCode == self.DIALOG_HELP):
+                # can't edit/delete when there are no commands
                 continue
-
-            # locate the selected value in case we need it
 
             if retCode == self.DIALOG_EXTRA:
                 # add
                 commandInfo = BoostInfoTree()
                 commandInfo.createSubtree("name", '')
                 commandInfo.createSubtree("functionName", '')
-                commandInfo.parent = self.currentConfig["device"][0]
 
                 newCommand = self.commandInsertEditForm(commandInfo)
                 if newCommand is not None:
@@ -288,52 +346,56 @@ class ConfigManager(Dialog):
             elif retCode == self.DIALOG_CANCEL or retCode==self.DIALOG_ESC:
                 exit = True
             elif retCode == self.DIALOG_OK:
-                info = allCommands[commandNameList.index(value)]
-                self.commandInsertEditForm(info)
+                idx = commandNameList.index(value)
+                infoCopy = allCommands[idx].clone()
+                updatedInfo = self.commandInsertEditForm(infoCopy)
+                if updatedInfo is not None:
+                    allCommands[idx] = updatedInfo
+                    updatedInfo.parent = self.currentConfig["device"][0]
             elif retCode == self.DIALOG_HELP:
-                info = allCommands[commandNameList.index(value)]
-                #DELETEDDDD
-                parentNode = info.parent
-                allCommands = parentNode.subTrees['command']
-                allCommands.remove(info)
-                if len(allCommands) == 0:
-                    parentNode.subTrees.pop('command')
+                allCommands.pop(commandNameList.index(value))
 
     ####
     # Set validator cert directories
     ####
-    def addCertDirectory(self):
-        retCode, newDir = self.fileSelection(directoriesOnly=True)
-
 
     def setCertDirectories(self):
         dummyName = '--- NO VERIFICATION --- '
         exit = False
         while not exit:
             allDirs = []
-            trustAnchors = self.currentConfig["validator/trust-anchor"]
+            trustAnchors = self.currentConfig["validator"][0].subtrees["trust-anchor"]
             for anchor in trustAnchors:
                 if anchor["type"][0].value == 'dir':
                     allDirs.append(anchor["dir"][0].value)
             if len(allDirs) == 0:
                 allDirs = [dummyName]
                 
-            retCode, value = self.insertDeleteMenu('', allDirs, deleteLabel='Delete', editLabel=None)
+            # apparently having no 'ok' button wth an extra button messes 
+            # up dialog's return codes...
+            retCode, value = self.insertDeleteMenu('', allDirs, deleteLabel='Delete', editLabel='Add', insertLabel=None)
             if value == dummyName and retCode == self.DIALOG_HELP:
                 continue
-
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:
                 exit = True
-            elif retCode == self.DIALOG_EXTRA:
+            elif retCode == self.DIALOG_OK:
                 #add
-                pass
+                helpStr = u'\u2195'+"/Tab to change focus, Space to enter/select directory"
+                retCode, newDir = self.fileSelection(msg=helpStr, directoriesOnly=True)
+                if retCode == self.DIALOG_OK:
+                    newAnchor = BoostInfoTree()
+                    newAnchor.createSubtree("type", "dir")
+                    newAnchor.createSubtree("dir", newDir)
+                    newAnchor.createSubtree("refresh", "1h")
+                    self.currentConfig["validator"][0].addSubtree("trust-anchor", newAnchor)
             elif retCode == self.DIALOG_HELP:
                 #delete
                 anchor = trustAnchors[allDirs.index(value)]
+                trustAnchors.remove(anchor)
             
             
     ###
-    # Other methods
+    # Main methods
     ###
     def quit(self):
         sys.exit(0)

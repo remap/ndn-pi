@@ -66,8 +66,11 @@ class Dialog(object):
         defaultno = '--defaultno' if default == 'no' else ''
         return self.run('yesno', msg, postExtra=[defaultno], exit_on=[255]).returncode == 0
 
-    def alert(self, msg):
-        self.run('msgbox', msg)
+    def alert(self, msg, showButtons=True):
+        if not showButtons:
+            self.run('infobox', msg)
+        else:
+            self.run('msgbox', msg)
 
     def view_file(self, path):
         self.run('textbox', path, postExtra=['--scrolltext'])
@@ -135,7 +138,7 @@ class Dialog(object):
     def checklist(self, msg='', items=(), prefix=' - '):
         return self.showlist('checklist', msg, items, prefix)
 
-    def fileSelection(self, msg='', startDirectory='.', preExtras=(), 
+    def fileSelection(self, msg='', startDirectory='./', preExtras=(), 
             postExtras=(), directoriesOnly=False):
         
         # some instructions are in order
@@ -152,11 +155,10 @@ class Dialog(object):
         while returnCode == self.DIALOG_OK:
             #sanitize the value
             if os.path.isdir(value):
-                value = os.path.abspath(value)
+                value = os.path.normpath(value)
                 break
             elif len(value) > 0:
-                value = os.path.dirname(value)
-                if os.path.isdir(value):
+                if os.path.isdir(os.path.dirname(value)):
                     startDirectory = value
             returnCode, value = self.run(commandName, startDirectory, preExtras, postExtras)
         return Response(returnCode, value)
