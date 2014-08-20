@@ -38,7 +38,7 @@ class ConfigManager(Dialog):
         self.baseFile = os.path.join(pathName, '.base.conf')
 
         if fileName is None:
-            self.inputFile = None
+            self.inputFile = ''
             self.outputFile = 'config.conf'
             #load basic settings from template
             self.importDefaults()

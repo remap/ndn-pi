@@ -1,0 +1,9 @@
+message ListDevicesCommandMessage {
+	message Name {
+		repeated bytes components = 8;
+	}
+	message ListDevicesCommand {
+		required Name environmentName = 224;
+	}
+	required ListDevicesCommand command = 225;
+}

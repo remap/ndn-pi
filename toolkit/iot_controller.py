@@ -13,11 +13,11 @@ from pyndn.encoding import ProtobufTlv
 from trust.iot_identity_storage import IotIdentityStorage
 from trust.iot_policy_manager import IotPolicyManager
 
-from trust.cert_request_pb2 import CertificateRequestMessage
-from trust.list_devices_pb2 import ListDevicesCommandMessage
+from commands.cert_request_pb2 import CertificateRequestMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
 from iot_node import IotNode
+from pyndn.security.security_exception import SecurityException
 
 try:
     import asyncio
@@ -25,58 +25,109 @@ except ImportError:
     import trollius as asyncio
 
 class IotController(IotNode):
+    """
+    The controller class has a few built-in commands:
+        - listDevices: return the full network names of all attached devices
+        - certificateRequest: takes public key information and returns name of
+            new certificate
+    """
     def __init__(self, configFilename):
         super(IotController, self).__init__(configFilename)
 
+    def createCertificateIfNecessary(self, commandParamsTlv):
+        # look up the certificate and return its name if it exists
+        # if not, generate one, install it,  and return its name
 
-    def onStartup(self):
-        if not self.hasRootSignedCertificate(self):
-            #this is an ERROR - we are the root!
-            self.log.error("Controller has no certificate!")
-            self.stop()
+        # NOTE: should we always generate?
+        message = CertificateRequestMessage()
+        ProtobufTlv.decode(message, commandParamsTlv.getValue())
 
-    def onCommandReceived(self, prefix, interest, transport, prefixId):
-        # we may have trust-related commands, lighting commands, or a certificate request
-        # route appropriately
-        def verificationSucceeded(data):
-            self.log.info("Verified: " + data.getName().toUri())
-            interestName = (interest.getName())
-            commandStr = str(interestName.get(self.prefix.size()).toEscapedString())
+        keyComponents = message.command.keyName.components
+        keyName = Name("/".join(keyComponents))
 
-            self.log.debug("Got command: "+commandStr)
-            try:
-                self.dispatchValidCommand(commandStr, interest, transport)
-            except Exception as e:
-                self.log.error(str(e))
-
-        def verificationFailed(data):
-            self.log.info("Invalid" + data.getName().toUri())
+        self.log.debug("Key name: " + keyName.toUri())
 
         try:
-            self.keychain.verifyInterest(interest, verificationSucceeded, verificationFailed)
-        except Exception as e:
-            self.log.error(str(e)+"/"+str(sys.exc_info()))
+            certificateName = self._identityStorage.getDefaultCertificateNameForKey(keyName)
+            return self._identityStorage.getCertificate(certificateName)
+        except SecurityException:
+            if not self._policyManager.getEnvironmentPrefix().match(keyName):
+                # we do not issue certs for keys outside of our network
+                return None
 
-    def onRegisterFailed(self, prefix):
-        self.log.error("Could not register " + prefix.toUri())
-        if self._registrationFailures < 5:
-            self._registrationFailures += 1
-            self.log.error("Retry: {}/{}".format(self._registrationFailures, 5)) 
-            self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
+            keyDer = Blob(message.command.keyBits)
+            keyType = message.command.keyType
+            publicKey = PublicKey(keyType, keyDer)
+            certificate = self.createCertificateForKey(keyName, publicKey)
+            self._identityStorage.addCertificate(certificate)
+            return certificate
+
+    def createCertificateForKey(self, keyName, publicKey):
+        timestamp = (time.time())
+
+        # TODO: put the 'KEY' part after the environment prefix to be responsible for cert delivery
+        certificateName = keyName.getPrefix(-1).append('KEY').append(keyName.get(-1))
+        certificateName.append("ID-CERT").append(Name.Component(struct.pack(">l", timestamp)))        
+
+        certificate = IdentityCertificate(certificateName)
+        # certificate expects time in milliseconds
+        certificate.setNotBefore(timestamp)
+        certificate.setNotAfter((timestamp + 30*86400)) # about a month
+
+        certificate.setPublicKeyInfo(publicKey)
+
+        # ndnsec likes to put the key name in a subject description
+        sd = CertificateSubjectDescription("2.5.4.41", keyName.toUri())
+        certificate.addSubjectDescription(sd)
+
+        # sign this new certificate
+        certificate.encode()
+        self._keychain.sign(certificate, self._defaultCertName)
+
+        return certificate
+
+
+    def listAuthorizedDevices(self):
+        return matchList
+
+
+    def onCommandReceived(self, prefix, interest, transport, prefixId):
+        # handle the listDevices and certificateRequest commands, else use
+        # default behavior
+        afterPrefix = interest.getName().get(prefix.size()).toEscapedString()
+        if afterPrefix == "listDevices":
+            #compose device list
+            self.log.debug("Received device list request")
+            environmentName = self._policyManager.getEnvironmentPrefix()
+            deviceList = '\n'.join(self._identityStorage.getIdentitiesMatching(environmentName))
+
+            dataName = Name(interest.getName()).append(Name.Component.fromNumber(int(time.time())))
+            response = Data(dataName)
+            response.setContent(deviceList)
+            self.sendData(response, transport)
+        elif afterPrefix == "certificateRequest":
+            #build and sign certificate
+            self.log.debug("Received certificate request")
+            paramsComponent = interest.getName().get(prefix.size()+1)
+            certData = self.createCertificateIfNecessary(paramsComponent)
+
+            #tell the requester where to get it
+            response = Data(interest.getName())
+            if certData is not None:
+                response.setContent(certData.wireEncode())
+                response.getMetaInfo().setFreshnessPeriod(10000) # should be good even longer
+            else:
+                reponse.setContent("Denied")
+            self.sendData(response, transport)
         else:
+            super(IotController, self).onCommandReceived(prefix, interest, transport, prefixId)
+
+    def onStartup(self):
+        if not self._policyManager.hasRootSignedCertificate():
+            #this is an ERROR - we are the root!
+            self.log.critical("Controller has no certificate!")
             self.stop()
 
-
 if __name__ == '__main__':
-    
-    config = RawConfigParser()
-    config.read('config.cfg')
-
-    myPrefix = config.get('lighting', 'prefix')
-
-    l = LightController(prefix=myPrefix)
-
-    try:
-        l.start()
-    except KeyboardInterrupt:
-        l.stop()
+   n = IotController("controller.conf")
+   n.start()

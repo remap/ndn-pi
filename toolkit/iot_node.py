@@ -14,9 +14,10 @@ from trust.iot_identity_storage import IotIdentityStorage
 from trust.iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
-from commands.list_capabilities_pb2 import ListCapabilitiesMessage
+#from commands.list_capabilities_pb2 import ListCapabilitiesMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
+from pyndn.security.security_exception import SecurityException
 
 try:
     import asyncio
@@ -30,16 +31,18 @@ class IotNode(object):
         self.config = BoostInfoParser()
         self.config.read(configFilename)
 
-        prefix = config["environment/deviceName"][0].getValue()
-        
-        self.prefix = Name(prefix)
         self._identityStorage = IotIdentityStorage()
-        self._identityManager = IdentityManager()
+        self._identityManager = IdentityManager(self._identityStorage)
         self._policyManager = IotPolicyManager(self._identityStorage, configFilename)
+
+        deviceSuffix = self.config["device/deviceName"][0].value
+        self.prefix = Name(self._policyManager.getEnvironmentPrefix()).append(deviceSuffix)
+        
         self.keychain = KeyChain(self._identityManager, self._policyManager)
         self._identityStorage.setDefaultIdentity(self.prefix)
 
         self._registrationFailures = 0
+        self.prepareLogging()
     
     def prepareLogging(self):
         self.log = logging.getLogger(str(self.__class__))
@@ -47,15 +50,14 @@ class IotNode(object):
         logFormat = "%(asctime)-15s %(name)-20s %(funcName)-20s (%(levelname)-8s):\n\t%(message)s"
         sh = logging.StreamHandler()
         sh.setFormatter(logging.Formatter(logFormat))
-        sh.setLevel(logging.INFO)
+        sh.setLevel(logging.DEBUG)
         # without this, a lot of ThreadsafeFace errors get swallowed up
         logging.getLogger("trollius").addHandler(sh)
         self.log.addHandler(sh)
 
-
     def start(self):
         self.loop = asyncio.get_event_loop()
-        self.face = ThreadsafeFace(self.loop, self.address)
+        self.face = ThreadsafeFace(self.loop, '')
         self.face.setCommandSigningInfo(self.keychain, self.keychain.getDefaultCertificateName())
         self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
         self.keychain.setFace(self.face)
@@ -75,20 +77,25 @@ class IotNode(object):
         return self.log
 
     def stop(self):
-        print 'Stopping...'
         self.log.info("Shutting down")
         self.loop.close()
         self.face.shutdown()
 
     def onStartup(self):
-        if not self.hasRootSignedCertificate(self):
+        if not self._policyManager.hasRootSignedCertificate():
             self.loop.call_soon(self.sendCertificateRequest)
         else:
             self.loop.call_soon(self.updateCapabilities)
 
     def updateCapabilities(self):
-        self.log.info('Updating capabilities')
-        pass
+        fullCommandName = Name(self._policyManager.getTrustRootIdentity()).append('listDevices')
+        def onListReceived(interest, data):
+            print "Device list:\n\t{}".format(data.getContent().toRawStr())
+        def onListTimeout(interest):
+            print "Timed out on device list"
+
+        self.face.expressInterest(Name(fullCommandName), onListReceived, onListTimeout)
+        
 
     def sendCertificateRequest(self):
         """
@@ -97,7 +104,7 @@ class IotNode(object):
         
         """
 
-        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity()
+        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(self.prefix)
         self.log.debug("Found key: " + defaultKey.toUri())
 
         message = CertificateRequestMessage()
@@ -131,7 +138,10 @@ class IotNode(object):
                 newCert = IdentityCertificate()
                 newCert.wireDecode(data.getContent())
                 self.log.debug("Received certificate:\n"+str(newCert))
-                self._identityManager.addCertificate(newCert)
+                try:
+                    self._identityManager.addCertificate(newCert)
+                except SecurityException:
+                    pass # can't tell existing certificat from another error
                 self._identityManager.setDefaultCertificateForKey(newCert)
             except Exception as e:
                 self.log.exception("Could not import new certificate", exc_info=True)
@@ -141,41 +151,78 @@ class IotNode(object):
         self.keychain.verifyData(data, processValidCertificate, certificateValidationFailed)
         self.loop.call_later(5, self.updateCapabilities)
 
-    def dispatchValidCommand(self, commandStr, interest, transport):
-        if commandStr == 'setRGB':
-            dataOut = self.handleLightingCommand(interest)
-        else:
-            dataOut = Data(interestName)
-            dataOut.setContent("BAD COMMAND")
-        self.keychain.sign(dataOut, self.keychain.getDefaultCertificateName())
+    def sendData(self, data, transport, sign=True):
+        if sign:
+            self.keychain.sign(data, self.keychain.getDefaultCertificateName())
+        transport.send(data.wireEncode().buf())
 
-        encodedData = dataOut.wireEncode()
-        transport.send(encodedData.toBuffer())
-        self.log.debug("Sent data named " + dataOut.getName().toUri())
+    def verificationFailed(dataOrInterest):
+        self.log.info("Received invalid" + dataOrInterest.getName().toUri())
 
+    def makeVerifiedCommandDispatch(function, transport):
+        def onVerified(interest):
+            self.log.info("Verified: " + interest.getName().toUri())
+            responseData = function(interest)
+            self.sendData(responseData, transport)
+        return onVerified
 
     def onCommandReceived(self, prefix, interest, transport, prefixId):
-        # we may have trust-related commands, lighting commands, or a certificate request
-        # route appropriately
-        def verificationSucceeded(data):
-            self.log.info("Verified: " + data.getName().toUri())
-            interestName = (interest.getName())
-            commandStr = str(interestName.get(self.prefix.size()).toEscapedString())
-
-            self.log.debug("Got command: "+commandStr)
-            try:
-                self.dispatchValidCommand(commandStr, interest, transport)
-            except Exception as e:
-                self.log.error(str(e))
-
-        def verificationFailed(data):
-            self.log.info("Invalid" + data.getName().toUri())
-
+        # if this is a cert request, we can serve it from our store (if it exists)
+        # else we must look in our command list to see if this requires verification
+        # we dispatch directly or after verification as necessary
         try:
-            self.keychain.verifyInterest(interest, verificationSucceeded, verificationFailed)
-        except Exception as e:
-            self.log.error(str(e)+"/"+str(sys.exc_info()))
+            certData = self._identityStorage.getCertificate(interest.getName())
+        except:
+            pass
+        else:
+            # if we sign the certificate, we lose the controller's signature!
+            self.sendData(certData, transport, False)
+            return
 
+        # what to do when we can't serve a request
+        def onUnknownCommand():
+            # send an error message
+            responseData = Data(Name(interest.getName()).append("unknown"))
+            responseData.setContent("Unknown command name")
+            responseData.getMetaInfo().setFreshnessPeriod(1000) # expire soon
+            self.sendData(responseData, transport)
+
+        # now we look for the first command that matches in our config
+        allCommands = self.config["device/command"]
+        for command in allCommands:
+            fullCommandName = Name(self.prefix).append(command["name"][0].value)
+            if fullCommandName.match(interest.getName()):
+                dispatchFunctionName = command["functionName"][0].value
+                try:
+                    func = self.__getattribute__(dispatchFunctionName)
+                except AttributeError:
+                    # command not implemented
+                    onUnknownCommand()
+                    return
+            
+                try:
+                    command["authorize"][0]
+                except KeyError:
+                    # no need to authorize, just run
+                    responseData = func(interest)
+                    self.sendData(responseData, transport)
+                    return 
+            
+                # requires verification
+                try:
+                    self.keychain.verifyInterest(interest, 
+                            self.makeVerifiedCommandDispatch(func, transport),
+                            self.verificationFailed)
+                    # if verification fails, it will time out
+                    return
+                except Exception as e:
+                    self.log.exception("Exception while verifying command", exc_info=True)
+                    onUnknownCommand()
+                    return
+        #if we get here, we really don't know this command
+        onUnknownCommand()
+        return
+                
 
     def onRegisterFailed(self, prefix):
         self.log.error("Could not register " + prefix.toUri())
@@ -184,5 +231,10 @@ class IotNode(object):
             self.log.error("Retry: {}/{}".format(self._registrationFailures, 5)) 
             self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
         else:
+            self.log.critical("Could not register device prefix, ABORTING")
             self.stop()
+
+if __name__ == '__main__':
+    n = IotNode("config.conf")
+    n.start()
 
