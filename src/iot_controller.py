@@ -10,8 +10,8 @@ from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.encoding import ProtobufTlv
 
-from trust.iot_identity_storage import IotIdentityStorage
-from trust.iot_policy_manager import IotPolicyManager
+from iot_identity_storage import IotIdentityStorage
+from iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
 
@@ -128,6 +128,3 @@ class IotController(IotNode):
             self.log.critical("Controller has no certificate!")
             self.stop()
 
-if __name__ == '__main__':
-   n = IotController("controller.conf")
-   n.start()

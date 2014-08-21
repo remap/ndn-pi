@@ -19,7 +19,7 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 from __future__ import print_function
-from config.config_manager import ConfigManager
+from src.config.config_manager import ConfigManager
 import sys
 
 if len(sys.argv) > 2:

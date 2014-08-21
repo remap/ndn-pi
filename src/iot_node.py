@@ -10,8 +10,8 @@ from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.encoding import ProtobufTlv
 
-from trust.iot_identity_storage import IotIdentityStorage
-from trust.iot_policy_manager import IotPolicyManager
+from iot_identity_storage import IotIdentityStorage
+from iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
 #from commands.list_capabilities_pb2 import ListCapabilitiesMessage
@@ -42,6 +42,7 @@ class IotNode(object):
         self._identityStorage.setDefaultIdentity(self.prefix)
 
         self._registrationFailures = 0
+        self._certificateTimeouts = 0
         self.prepareLogging()
     
     def prepareLogging(self):
@@ -128,6 +129,12 @@ class IotNode(object):
     def onCertificateTimeout(self, interest):
         #give up?
         self.log.warn("Timed out trying to get certificate")
+        if self._certificateTimeouts > 5:
+            self.log.critical("Trust root cannot be reached, exiting")
+            self._isStopped = True
+        else:
+            self._certificateTimeouts += 1
+            self.loop.call_soon(self.sendCertificateRequest)
         pass
 
 
@@ -232,9 +239,6 @@ class IotNode(object):
             self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
         else:
             self.log.critical("Could not register device prefix, ABORTING")
-            self.stop()
+            self._isStopped = True
 
-if __name__ == '__main__':
-    n = IotNode("config.conf")
-    n.start()
 
