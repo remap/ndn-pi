@@ -2,8 +2,7 @@ import time
 import subprocess
 import sys
 
-from app.cec_device import CecDevice
-from app.cec_command import CecCommand
+from app.cec import CecDevice, CecCommand
 
 PI = CecDevice.RECORDING_1
 

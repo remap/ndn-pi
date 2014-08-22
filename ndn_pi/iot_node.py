@@ -1,4 +1,22 @@
 
+# -*- Mode:python; c-file-style:"gnu"; indent-tabs-mode:nil -*- */
+#
+# Copyright (C) 2014 Regents of the University of California.
+# Author: Adeola Bannis <thecodemaiden@gmail.com>
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# A copy of the GNU General Public License is in the file COPYING.
 import logging
 import time
 import sys
@@ -14,7 +32,7 @@ from iot_identity_storage import IotIdentityStorage
 from iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
-#from commands.list_capabilities_pb2 import ListCapabilitiesMessage
+from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
@@ -25,6 +43,10 @@ except ImportError:
     import trollius as asyncio
 
 class IotNode(object):
+    """
+    There is a built-in 'ping' command that takes precedence over user-defined
+    ping (if any)
+    """
     def __init__(self, configFilename):
         super(IotNode, self).__init__()
 
@@ -38,7 +60,7 @@ class IotNode(object):
         deviceSuffix = self.config["device/deviceName"][0].value
         self.prefix = Name(self._policyManager.getEnvironmentPrefix()).append(deviceSuffix)
         
-        self.keychain = KeyChain(self._identityManager, self._policyManager)
+        self._keyChain = KeyChain(self._identityManager, self._policyManager)
         self._identityStorage.setDefaultIdentity(self.prefix)
 
         self._registrationFailures = 0
@@ -57,18 +79,18 @@ class IotNode(object):
         self.log.addHandler(sh)
 
     def start(self):
-        self.loop = asyncio.get_event_loop()
-        self.face = ThreadsafeFace(self.loop, '')
-        self.face.setCommandSigningInfo(self.keychain, self.keychain.getDefaultCertificateName())
-        self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
-        self.keychain.setFace(self.face)
+        self._loop = asyncio.get_event_loop()
+        self._face = ThreadsafeFace(self._loop, '')
+        self._face.setCommandSigningInfo(self._keyChain, self._keyChain.getDefaultCertificateName())
+        self._face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
+        self._keyChain.setFace(self._face)
 
-        self.loop.call_soon(self.onStartup)
+        self._loop.call_soon(self.onStartup)
 
         self._isStopped = False
-        self.face.stopWhen(lambda:self._isStopped)
+        self._face.stopWhen(lambda:self._isStopped)
         try:
-            self.loop.run_forever()
+            self._loop.run_forever()
         except Exception as e:
             self.log.error(str(e))
         finally:
@@ -79,25 +101,53 @@ class IotNode(object):
 
     def stop(self):
         self.log.info("Shutting down")
-        self.loop.close()
-        self.face.shutdown()
+        self._loop.close()
+        self._face.shutdown()
 
     def onStartup(self):
         if not self._policyManager.hasRootSignedCertificate():
-            self.loop.call_soon(self.sendCertificateRequest)
+            self._loop.call_soon(self.sendCertificateRequest)
         else:
-            self.loop.call_soon(self.updateCapabilities)
+            self._loop.call_soon(self.updateCapabilities)
+
+    def onCapabilitiesAck(self, interest, data):
+        self.log.debug('Received {}'.format(data.getName().toUri()))
+        # todo: check it?
+
+    def onCapabilitiesTimeout(self, interest):
+        #try again in 30s
+        self.log.debug('Timeout waiting for capabilities update')
+        self._loop.call_later(30, self.updateCapabilities)
 
     def updateCapabilities(self):
-        fullCommandName = Name(self._policyManager.getTrustRootIdentity()).append('listDevices')
-        def onListReceived(interest, data):
-            print "Device list:\n\t{}".format(data.getContent().toRawStr())
-        def onListTimeout(interest):
-            print "Timed out on device list"
+        """
+        Send the controller a list of our commands.
+        """ 
+        fullCommandName = Name(self._policyManager.getTrustRootIdentity()
+                ).append('updateCapabilities')
+        capabilitiesMessage = UpdateCapabilitiesCommandMessage()
+        allCommands = self.config["device/command"]
+        for command in allCommands:
+            commandName = Name(command["name"][0].value)
+            capability = capabilitiesMessage.capabilities.add()
+            for i in range(commandName.size()):
+                capability.commandPrefix.components.extend(
+                        str(commandName.get(i).getValue()))
+            for node in command["keyword"]:
+                capability.keywords.extend(node.value)
+            try:
+                command["authorize"]
+                capability.needsSignature = True
+            except KeyError:
+                pass
 
-        self.face.expressInterest(Name(fullCommandName), onListReceived, onListTimeout)
-        
-
+        encodedCapabilities = ProtobufTlv.encode(capabilitiesMessage)
+        fullCommandName.append(encodedCapabilities)
+        interest = Interest(fullCommandName)
+        self._face.makeCommandInterest(interest)
+        self._face.expressInterest(interest, onCapabilitiesAck, onCapabilitiesTimeout)
+     
+       
     def sendCertificateRequest(self):
         """
         We compose a command interest with our public key info so the trust 
@@ -120,10 +170,10 @@ class IotNode(object):
         interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
         interest = Interest(interestName)
         interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
-        self.face.makeCommandInterest(interest)
+        self._face.makeCommandInterest(interest)
 
         self.log.debug("Certificate request: "+interest.getName().toUri())
-        self.face.expressInterest(interest, self.onCertificateReceived, self.onCertificateTimeout)
+        self._face.expressInterest(interest, self.onCertificateReceived, self.onCertificateTimeout)
    
 
     def onCertificateTimeout(self, interest):
@@ -134,7 +184,7 @@ class IotNode(object):
             self._isStopped = True
         else:
             self._certificateTimeouts += 1
-            self.loop.call_soon(self.sendCertificateRequest)
+            self._loop.call_soon(self.sendCertificateRequest)
         pass
 
 
@@ -155,12 +205,12 @@ class IotNode(object):
         def certificateValidationFailed(interest):
             self.log.warn("Certificate from controller is invalid!")
 
-        self.keychain.verifyData(data, processValidCertificate, certificateValidationFailed)
-        self.loop.call_later(5, self.updateCapabilities)
+        self._keyChain.verifyData(data, processValidCertificate, certificateValidationFailed)
+        self._loop.call_later(5, self.updateCapabilities)
 
     def sendData(self, data, transport, sign=True):
         if sign:
-            self.keychain.sign(data, self.keychain.getDefaultCertificateName())
+            self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
         transport.send(data.wireEncode().buf())
 
     def verificationFailed(dataOrInterest):
@@ -217,7 +267,7 @@ class IotNode(object):
             
                 # requires verification
                 try:
-                    self.keychain.verifyInterest(interest, 
+                    self._keyChain.verifyInterest(interest, 
                             self.makeVerifiedCommandDispatch(func, transport),
                             self.verificationFailed)
                     # if verification fails, it will time out
@@ -236,9 +286,16 @@ class IotNode(object):
         if self._registrationFailures < 5:
             self._registrationFailures += 1
             self.log.error("Retry: {}/{}".format(self._registrationFailures, 5)) 
-            self.face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
+            self._face.registerPrefix(self.prefix, self.onCommandReceived, self.onRegisterFailed)
         else:
             self.log.critical("Could not register device prefix, ABORTING")
             self._isStopped = True
+
+    @staticmethod
+    def getSerial():
+        with open('/proc/cpuinfo') as f:
+            for line in f:
+                if line.startswith('Serial'):
+                    return line.split(':')[1].strip()
 
 

@@ -20,8 +20,7 @@
 from pyndn import Name
 from pyndn.encoding import ProtobufTlv
 from util.common import Common
-from app.cec_device import CecDevice
-from app.cec_command import CecCommand
+from app.cec import CecDevice, CecCommand
 import app.cec_messages_pb2 as pb
 import subprocess
 import time
@@ -144,3 +143,5 @@ class CecTv(object):
 
     def onRegisterFailed(self, prefix):
         print "Register failed for prefix", prefix.toUri()
+
+

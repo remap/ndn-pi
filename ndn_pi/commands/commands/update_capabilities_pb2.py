@@ -9,9 +9,9 @@ from google.protobuf import descriptor_pb2
 
 
 DESCRIPTOR = descriptor.FileDescriptor(
-  name='update-capabilities.proto',
+  name='commands/update-capabilities.proto',
   package='',
-  serialized_pb='\n\x19update-capabilities.proto\"\x98\x03\n UpdateCapabilitiesCommandMessage\x12M\n\x07\x63ommand\x18\xe5\x01 \x02(\x0b\x32;.UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe3\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe4\x01 \x01(\t\x1a\xbf\x01\n\x19UpdateCapabilitiesCommand\x12>\n\rcommandPrefix\x18\xe0\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe1\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe2\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter')
+  serialized_pb='\n\"commands/update-capabilities.proto\"\xff\x02\n UpdateCapabilitiesCommandMessage\x12\x43\n\x0c\x63\x61pabilities\x18\xe5\x01 \x03(\x0b\x32,.UpdateCapabilitiesCommandMessage.Capability\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe3\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe4\x01 \x01(\t\x1a\xb0\x01\n\nCapability\x12>\n\rcommandPrefix\x18\xe0\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe1\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe2\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter')
 
 
 
@@ -39,8 +39,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_NAME = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=145,
-  serialized_end=171,
+  serialized_start=144,
+  serialized_end=170,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER = descriptor.Descriptor(
@@ -73,33 +73,33 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=173,
-  serialized_end=244,
+  serialized_start=172,
+  serialized_end=243,
 )
 
-_UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND = descriptor.Descriptor(
-  name='UpdateCapabilitiesCommand',
-  full_name='UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand',
+_UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY = descriptor.Descriptor(
+  name='Capability',
+  full_name='UpdateCapabilitiesCommandMessage.Capability',
   filename=None,
   file=DESCRIPTOR,
   containing_type=None,
   fields=[
     descriptor.FieldDescriptor(
-      name='commandPrefix', full_name='UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand.commandPrefix', index=0,
+      name='commandPrefix', full_name='UpdateCapabilitiesCommandMessage.Capability.commandPrefix', index=0,
       number=224, type=11, cpp_type=10, label=2,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
-      name='keywords', full_name='UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand.keywords', index=1,
+      name='keywords', full_name='UpdateCapabilitiesCommandMessage.Capability.keywords', index=1,
       number=225, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
-      name='parameterDesc', full_name='UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand.parameterDesc', index=2,
+      name='parameterDesc', full_name='UpdateCapabilitiesCommandMessage.Capability.parameterDesc', index=2,
       number=226, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
@@ -114,8 +114,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND = descriptor.Descrip
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=247,
-  serialized_end=438,
+  serialized_start=246,
+  serialized_end=422,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE = descriptor.Descriptor(
@@ -126,31 +126,31 @@ _UPDATECAPABILITIESCOMMANDMESSAGE = descriptor.Descriptor(
   containing_type=None,
   fields=[
     descriptor.FieldDescriptor(
-      name='command', full_name='UpdateCapabilitiesCommandMessage.command', index=0,
-      number=229, type=11, cpp_type=10, label=2,
-      has_default_value=False, default_value=None,
+      name='capabilities', full_name='UpdateCapabilitiesCommandMessage.capabilities', index=0,
+      number=229, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
   ],
   extensions=[
   ],
-  nested_types=[_UPDATECAPABILITIESCOMMANDMESSAGE_NAME, _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER, _UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND, ],
+  nested_types=[_UPDATECAPABILITIESCOMMANDMESSAGE_NAME, _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER, _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY, ],
   enum_types=[
   ],
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=30,
-  serialized_end=438,
+  serialized_start=39,
+  serialized_end=422,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE_NAME.containing_type = _UPDATECAPABILITIESCOMMANDMESSAGE;
 _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER.containing_type = _UPDATECAPABILITIESCOMMANDMESSAGE;
-_UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND.fields_by_name['commandPrefix'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_NAME
-_UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND.fields_by_name['parameterDesc'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER
-_UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND.containing_type = _UPDATECAPABILITIESCOMMANDMESSAGE;
-_UPDATECAPABILITIESCOMMANDMESSAGE.fields_by_name['command'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND
+_UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY.fields_by_name['commandPrefix'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_NAME
+_UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY.fields_by_name['parameterDesc'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER
+_UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY.containing_type = _UPDATECAPABILITIESCOMMANDMESSAGE;
+_UPDATECAPABILITIESCOMMANDMESSAGE.fields_by_name['capabilities'].message_type = _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY
 DESCRIPTOR.message_types_by_name['UpdateCapabilitiesCommandMessage'] = _UPDATECAPABILITIESCOMMANDMESSAGE
 
 class UpdateCapabilitiesCommandMessage(message.Message):
@@ -168,11 +168,11 @@ class UpdateCapabilitiesCommandMessage(message.Message):
     
     # @@protoc_insertion_point(class_scope:UpdateCapabilitiesCommandMessage.CapabilitiesParameter)
   
-  class UpdateCapabilitiesCommand(message.Message):
+  class Capability(message.Message):
     __metaclass__ = reflection.GeneratedProtocolMessageType
-    DESCRIPTOR = _UPDATECAPABILITIESCOMMANDMESSAGE_UPDATECAPABILITIESCOMMAND
+    DESCRIPTOR = _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY
     
-    # @@protoc_insertion_point(class_scope:UpdateCapabilitiesCommandMessage.UpdateCapabilitiesCommand)
+    # @@protoc_insertion_point(class_scope:UpdateCapabilitiesCommandMessage.Capability)
   DESCRIPTOR = _UPDATECAPABILITIESCOMMANDMESSAGE
   
   # @@protoc_insertion_point(class_scope:UpdateCapabilitiesCommandMessage)

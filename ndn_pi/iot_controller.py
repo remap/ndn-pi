@@ -13,11 +13,14 @@ from pyndn.encoding import ProtobufTlv
 from iot_identity_storage import IotIdentityStorage
 from iot_policy_manager import IotPolicyManager
 
-from commands.cert_request_pb2 import CertificateRequestMessage
+from ndn_pi.commands.cert_request_pb2 import CertificateRequestMessage
+from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
-from iot_node import IotNode
+from ndn_pi.iot_node import IotNode
 from pyndn.security.security_exception import SecurityException
+
+from collections import defaultdict
 
 try:
     import asyncio
@@ -27,12 +30,17 @@ except ImportError:
 class IotController(IotNode):
     """
     The controller class has a few built-in commands:
-        - listDevices: return the full network names of all attached devices
+        - listDevices: return the names and capabilities of all attached devices
         - certificateRequest: takes public key information and returns name of
             new certificate
+        - updateCapabilities: should be sent periodically from IotNodes to update their
+           command lists
     """
     def __init__(self, configFilename):
         super(IotController, self).__init__(configFilename)
+
+        # the controller keeps a directory of device prefix->capabilities
+        self._directory = defaultdict(list)
 
     def createCertificateIfNecessary(self, commandParamsTlv):
         # look up the certificate and return its name if it exists
@@ -86,14 +94,41 @@ class IotController(IotNode):
 
         return certificate
 
+    def updateDeviceCapabilities(self, messageComponent):
+        message = UpdateCapabilitiesCommandMessage()
+        ProtobufTlv.decode(message, messageComponent)
 
-    def listAuthorizedDevices(self):
-        return matchList
+        # we assume the sender is the one who signed the interest...
+        signature = self._policyManager._extractSignature(interest)
+        certificateName = signature.getKeyLocator().getKeyName()
+        senderIdentity = IdentityCertificate.certificateNameToPublicKeyName(certificateName).getPrefix(-1)
+
+        # we remove all the old capabilities for the sender
+        for keyword in self._directory:
+            self._directory[keyword] = [uri for uri in self._directory[keyword] 
+                    if not senderIdentity.match(Name(uri))]
+
+        # then we add the ones from the message
+        for capability in message.capabilities:
+            capabilityPrefix = Name()
+            for component in capability.commandPrefix.components:
+                capabilityPrefix.append(component)
+            commandUri = capabilityPrefix.toUri()
+            for keyword in capability.keywords:
+                if capabilityPrefix not in self._directory[keyword]:
+                    self._directory[keyword].add(capabilityPrefix.toUri())
+
+        print self._directory
+
+
+
+        
+
+        
 
 
     def onCommandReceived(self, prefix, interest, transport, prefixId):
-        # handle the listDevices and certificateRequest commands, else use
-        # default behavior
+        # handle the built-in commands, else use default behavior
         afterPrefix = interest.getName().get(prefix.size()).toEscapedString()
         if afterPrefix == "listDevices":
             #compose device list
@@ -111,7 +146,6 @@ class IotController(IotNode):
             paramsComponent = interest.getName().get(prefix.size()+1)
             certData = self.createCertificateIfNecessary(paramsComponent)
 
-            #tell the requester where to get it
             response = Data(interest.getName())
             if certData is not None:
                 response.setContent(certData.wireEncode())
@@ -119,12 +153,22 @@ class IotController(IotNode):
             else:
                 reponse.setContent("Denied")
             self.sendData(response, transport)
+        elif afterPrefix == "updateCapabilities":
+            # needs to be signed!
+            def onVerifiedCapabilities(interest):
+                response = Data(interest.getName())
+                response.setContent(str(time.time()))
+                self.sendData(response, transport)
+                messageComponent = interest.get(prefix.size()+1)
+                self.updateDeviceCapabilities(messageComponent)
+            self._keyChain.verifyInterest(interest, 
+                    onVerifiedCapabilities, self.verificationFailed)
         else:
             super(IotController, self).onCommandReceived(prefix, interest, transport, prefixId)
 
     def onStartup(self):
         if not self._policyManager.hasRootSignedCertificate():
             #this is an ERROR - we are the root!
-            self.log.critical("Controller has no certificate!")
+            self.log.critical("Controller has no certificate! Try running ndn-config.")
             self.stop()
 

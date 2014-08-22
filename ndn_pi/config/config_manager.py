@@ -244,6 +244,8 @@ class ConfigManager(Dialog):
         fields = []
         commandName = commandInfo["name"][0].getValue()
         functionName = commandInfo["functionName"][0].getValue()
+        commandKeywords = commandInfo["keyword"]
+        keywordList = ','.join([k.value for k in commandKeywords])
         try:
             commandInfo["authorize"]
             authStr = 'yes'
@@ -252,12 +254,14 @@ class ConfigManager(Dialog):
 
         fields.append(Dialog.FormField('Name', commandName))
         fields.append(Dialog.FormField('Function name', functionName))
+        fields.append(Dialog.FormField('Keyword(s)', keywordList))
         fields.append(Dialog.FormField('Requires authentication',  authStr, 0))
         return fields
 
 
-    def commandInsertEditForm(self, commandInfo):
+    def commandInsertEditForm(self, originalInfo):
         accept = False
+        commandInfo = originalInfo.clone()
         while not accept:
             fields = self.prepareCommandInfoFormFields(commandInfo)
             retCode, values = self.form(formFieldInfo=fields, 
@@ -265,6 +269,7 @@ class ConfigManager(Dialog):
         
             newName = values[0] if len(values) > 0 else ''
             newFuncName = values[1] if len(values) > 1 else ''
+            newKeywords = values[2] if len(values) > 2 else ''
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:
                 accept = True
                 commandInfo = None
@@ -272,6 +277,12 @@ class ConfigManager(Dialog):
 
             commandInfo["name"][0].value = newName
             commandInfo["functionName"][0].value = newFuncName
+            keywordList = re.split('\s*,\s*', newKeywords)
+            # remove old keywords and add these
+            commandInfo.subtrees["keyword"] = []
+            for keyword in keywordList:
+                commandInfo.createSubtree("keyword", keyword)
+
             if retCode == self.DIALOG_EXTRA:
                 # toggle authorization state
                 try:
@@ -281,7 +292,7 @@ class ConfigManager(Dialog):
                     commandInfo.createSubtree('authorize')
             elif retCode == self.DIALOG_OK:
                 # see if we are missing any info
-                if len(newName) == 0 or len(newFuncName) == 0:
+                if len(newName) == 0 or len(newFuncName) == 0 or len(newKeywords) == 0:
                     self.alert("All values are required")
                 elif re.match('^[a-zA-Z_][0-9a-zA-Z_]+$', newFuncName) is None:
                     self.alert("Function name is invalid")
@@ -295,7 +306,7 @@ class ConfigManager(Dialog):
                         pass
                     else:
                         for command in allCommands:
-                            if command["name"][0].value == newName and command is not commandInfo:
+                            if command["name"][0].value == newName and command is not originalInfo:
                                 self.alert("Command already exists with that name!")
                                 accept = False
                                 break
@@ -311,10 +322,9 @@ class ConfigManager(Dialog):
             commandNameList = []
             try:
                 # go straight to the source, not a copy
-                #allCommands = self.currentConfig["device/command"]
                 allCommands = self.currentConfig["device"][0].subtrees["command"]
             except KeyError:
-                commandNameList = [dummyName]
+                pass
             else:
                 for command in allCommands:
                     commandName = command["name"][0].getValue()
@@ -326,6 +336,9 @@ class ConfigManager(Dialog):
                         # the value should be empty, I'm just checking presence
                         commandName += "*"
                     commandNameList.append(commandName)
+
+            if len(commandNameList) == 0:
+                commandNameList = [dummyName]
 
             retCode, value = self.insertDeleteMenu('', commandNameList, deleteLabel='Delete')
 
@@ -347,13 +360,13 @@ class ConfigManager(Dialog):
                 exit = True
             elif retCode == self.DIALOG_OK:
                 idx = commandNameList.index(value)
-                infoCopy = allCommands[idx].clone()
-                updatedInfo = self.commandInsertEditForm(infoCopy)
+                updatedInfo = self.commandInsertEditForm(allCommands[idx])
                 if updatedInfo is not None:
                     allCommands[idx] = updatedInfo
                     updatedInfo.parent = self.currentConfig["device"][0]
             elif retCode == self.DIALOG_HELP:
                 allCommands.pop(commandNameList.index(value))
+                import pdb;
 
     ####
     # Set validator cert directories

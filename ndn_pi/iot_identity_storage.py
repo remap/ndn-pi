@@ -119,7 +119,6 @@ class IotIdentityStorage(IdentityStorage):
         if self.doesKeyExist(keyName):
             raise SecurityException("A key with the same name already exists!")
   
-
         keyUri = keyName.toUri()
         self._keyStore[keyUri] = (keyType, Blob(publicKeyDer))
         # add the key to the list for the identity

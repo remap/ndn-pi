@@ -8,11 +8,13 @@ message UpdateCapabilitiesCommandMessage {
 		optional string parameterDesc = 228; // what is this parameter for? (recommended)
 	}
 
-	message UpdateCapabilitiesCommand {
+	message Capability {
 		required Name commandPrefix = 224; // the name (after device prefix) of command 
 		repeated string keywords = 225; // other devices can search for one or more keywords
 						// e.g. 'cec', 'motion', 'thermostat'
 		repeated CapabilitiesParameter parameterDesc = 226; // list of parameter descriptions
+        optional bool needsSignature=230;
 	}
-	required UpdateCapabilitiesCommand command = 229;
+
+    repeated Capability capabilities = 229;
 }
