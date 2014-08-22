@@ -21,6 +21,7 @@ from ndn_pi.iot_node import IotNode
 from pyndn.security.security_exception import SecurityException
 
 from collections import defaultdict
+import json
 
 try:
     import asyncio
@@ -94,19 +95,21 @@ class IotController(IotNode):
 
         return certificate
 
-    def updateDeviceCapabilities(self, messageComponent):
-        message = UpdateCapabilitiesCommandMessage()
-        ProtobufTlv.decode(message, messageComponent)
+    def updateDeviceCapabilities(self, interest):
 
         # we assume the sender is the one who signed the interest...
         signature = self._policyManager._extractSignature(interest)
         certificateName = signature.getKeyLocator().getKeyName()
         senderIdentity = IdentityCertificate.certificateNameToPublicKeyName(certificateName).getPrefix(-1)
 
+        # get the params from the interest name
+        messageComponent = interest.getName().get(self.prefix.size()+1)
+        message = UpdateCapabilitiesCommandMessage()
+        ProtobufTlv.decode(message, messageComponent.getValue())
         # we remove all the old capabilities for the sender
         for keyword in self._directory:
-            self._directory[keyword] = [uri for uri in self._directory[keyword] 
-                    if not senderIdentity.match(Name(uri))]
+            self._directory[keyword] = [cap for cap in self._directory[keyword] 
+                    if not senderIdentity.match(Name(cap['name']))]
 
         # then we add the ones from the message
         for capability in message.capabilities:
@@ -114,31 +117,43 @@ class IotController(IotNode):
             for component in capability.commandPrefix.components:
                 capabilityPrefix.append(component)
             commandUri = capabilityPrefix.toUri()
+            if not senderIdentity.match(capabilityPrefix):
+                self.log.warn("Node {} tried to register another prefix: {}".format(
+                    senderIdentity.toUri(),commandUri))
             for keyword in capability.keywords:
                 if capabilityPrefix not in self._directory[keyword]:
-                    self._directory[keyword].add(capabilityPrefix.toUri())
+                    listing = {'signed':capability.needsSignature,
+                            'name':capabilityPrefix.toUri()}
+                    self._directory[keyword].append(listing)
 
-        print self._directory
+    def prepareCapabilitiesList(self, interestName):
+        """
+        Returns a JSON representation instead of a protobuf
+        """
+        try:
+            suffix = interestName.get(self.prefix.size()+1).toEscapedString()
+        except IndexError:
+            suffix = None
 
+        dataName = Name(interestName).append(Name.Component.fromNumber(int(time.time())))
+        response = Data(dataName)
+        if suffix is None:
+            toJsonify = self._directory
+        else:
+            toJsonify = self._directory[suffix]
 
+        response.setContent(json.dumps(toJsonify))
 
-        
-
-        
-
+        return response
 
     def onCommandReceived(self, prefix, interest, transport, prefixId):
         # handle the built-in commands, else use default behavior
-        afterPrefix = interest.getName().get(prefix.size()).toEscapedString()
+        interestName = interest.getName()
+        afterPrefix = interestName.get(prefix.size()).toEscapedString()
         if afterPrefix == "listDevices":
             #compose device list
             self.log.debug("Received device list request")
-            environmentName = self._policyManager.getEnvironmentPrefix()
-            deviceList = '\n'.join(self._identityStorage.getIdentitiesMatching(environmentName))
-
-            dataName = Name(interest.getName()).append(Name.Component.fromNumber(int(time.time())))
-            response = Data(dataName)
-            response.setContent(deviceList)
+            response = self.prepareCapabilitiesList(interestName)
             self.sendData(response, transport)
         elif afterPrefix == "certificateRequest":
             #build and sign certificate
@@ -155,12 +170,12 @@ class IotController(IotNode):
             self.sendData(response, transport)
         elif afterPrefix == "updateCapabilities":
             # needs to be signed!
+            self.log.debug("Received capabilities update")
             def onVerifiedCapabilities(interest):
                 response = Data(interest.getName())
                 response.setContent(str(time.time()))
                 self.sendData(response, transport)
-                messageComponent = interest.get(prefix.size()+1)
-                self.updateDeviceCapabilities(messageComponent)
+                self.updateDeviceCapabilities(interest)
             self._keyChain.verifyInterest(interest, 
                     onVerifiedCapabilities, self.verificationFailed)
         else:

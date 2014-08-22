@@ -351,6 +351,7 @@ class ConfigManager(Dialog):
                 commandInfo = BoostInfoTree()
                 commandInfo.createSubtree("name", '')
                 commandInfo.createSubtree("functionName", '')
+                commandInfo.createSubtree("keyword", '')
 
                 newCommand = self.commandInsertEditForm(commandInfo)
                 if newCommand is not None:

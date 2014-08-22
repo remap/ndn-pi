@@ -66,6 +66,8 @@ class IotNode(object):
         self._registrationFailures = 0
         self._certificateTimeouts = 0
         self.prepareLogging()
+
+        self._setupComplete = False
     
     def prepareLogging(self):
         self.log = logging.getLogger(str(self.__class__))
@@ -110,9 +112,19 @@ class IotNode(object):
         else:
             self._loop.call_soon(self.updateCapabilities)
 
+    def setupComplete(self):
+        """
+        The user can use this entry point to search for other devices, set up
+        control logic, etc
+        """
+        pass
+
     def onCapabilitiesAck(self, interest, data):
         self.log.debug('Received {}'.format(data.getName().toUri()))
         # todo: check it?
+        if not self._setupComplete:
+            self._setupComplete = True
+            self._loop.call_soon(self.setupComplete)
 
     def onCapabilitiesTimeout(self, interest):
         #try again in 30s
@@ -126,26 +138,31 @@ class IotNode(object):
         fullCommandName = Name(self._policyManager.getTrustRootIdentity()
                 ).append('updateCapabilities')
         capabilitiesMessage = UpdateCapabilitiesCommandMessage()
-        allCommands = self.config["device/command"]
-        for command in allCommands:
-            commandName = Name(command["name"][0].value)
-            capability = capabilitiesMessage.capabilities.add()
-            for i in range(commandName.size()):
-                capability.commandPrefix.components.extend(
-                        str(commandName.get(i).getValue()))
-            for node in command["keyword"]:
-                capability.keywords.extend(node.value)
-            try:
-                command["authorize"]
-                capability.needsSignature = True
-            except KeyError:
-                pass
+        try:
+            allCommands = self.config["device/command"]
+        except KeyError:
+            pass # no commands
+        else:
+            for command in allCommands:
+                commandName = Name(self.prefix).append(command["name"][0].value)
+                capability = capabilitiesMessage.capabilities.add()
+                for i in range(commandName.size()):
+                    capability.commandPrefix.components.append(
+                            str(commandName.get(i).getValue()))
+                for node in command["keyword"]:
+                    capability.keywords.append(node.value)
+                try:
+                    command["authorize"]
+                    capability.needsSignature = True
+                except KeyError:
+                    pass
 
         encodedCapabilities = ProtobufTlv.encode(capabilitiesMessage)
         fullCommandName.append(encodedCapabilities)
         interest = Interest(fullCommandName)
+        interest.setInterestLifetimeMilliseconds(3000)
         self._face.makeCommandInterest(interest)
-        self._face.expressInterest(interest, onCapabilitiesAck, onCapabilitiesTimeout)
+        self._face.expressInterest(interest, self.onCapabilitiesAck, self.onCapabilitiesTimeout)
      
        
     def sendCertificateRequest(self):
