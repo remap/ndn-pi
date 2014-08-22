@@ -244,11 +244,8 @@ class IotNode(object):
         # if this is a cert request, we can serve it from our store (if it exists)
         # else we must look in our command list to see if this requires verification
         # we dispatch directly or after verification as necessary
-        try:
-            certData = self._identityStorage.getCertificate(interest.getName())
-        except:
-            pass
-        else:
+        certData = self._identityStorage.getCertificate(interest.getName())
+        if certData is not None:
             # if we sign the certificate, we lose the controller's signature!
             self.sendData(certData, transport, False)
             return
