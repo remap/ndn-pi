@@ -23,7 +23,7 @@ from time import sleep
 class Pir(object):
     def __init__(self, pin):
         self._pin = pin
-        gpio.setmode(gpio.BOARD)
+        gpio.setmode(gpio.BCM)
         gpio.setup(self._pin, gpio.IN)
 
     def getPin(self):
@@ -33,7 +33,7 @@ class Pir(object):
         return bool(gpio.input(self._pin))
 
 if __name__ == "__main__":
-    pir = Pir(12)
+    pir = Pir(18)
     while True:
         v = pir.read()
         print v

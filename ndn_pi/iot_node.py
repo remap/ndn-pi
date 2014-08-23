@@ -144,7 +144,7 @@ class IotNode(object):
             pass # no commands
         else:
             for command in allCommands:
-                commandName = Name(self.prefix).append(command["name"][0].value)
+                commandName = Name(self.prefix).append(Name(command["name"][0].value))
                 capability = capabilitiesMessage.capabilities.add()
                 for i in range(commandName.size()):
                     capability.commandPrefix.components.append(
@@ -260,8 +260,9 @@ class IotNode(object):
 
         # now we look for the first command that matches in our config
         allCommands = self.config["device/command"]
+        
         for command in allCommands:
-            fullCommandName = Name(self.prefix).append(command["name"][0].value)
+            fullCommandName = Name(self.prefix).append(Name(str(command["name"][0].value)))
             if fullCommandName.match(interest.getName()):
                 dispatchFunctionName = command["functionName"][0].value
                 try:

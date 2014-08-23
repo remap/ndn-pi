@@ -18,7 +18,7 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 from app.pir_status import PirStatus
-from app.cec_status import CecStatus
+from app.cec import CecStatus
 
 class RemoteDevice(object):
     def __init__(self, type, id):

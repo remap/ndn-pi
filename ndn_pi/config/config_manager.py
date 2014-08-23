@@ -66,7 +66,6 @@ class ConfigManager(Dialog):
     def importDefaults(self):
         self.currentConfig.read(self.baseFile)
         self.updateTrustRules()
-        self.createCertificateIfNecessary()
 
     ###
     # Simple configuration
@@ -143,13 +142,10 @@ class ConfigManager(Dialog):
 
 
     def regenerateCertificate(self):
-        # makes a new key the default, but does not delete old keys and certs
-        networkName = self.currentConfig["device/environmentPrefix"][0].value
-        deviceSuffix = self.currentConfig["device/deviceName"][0].value
-        deviceName = '/'.join([networkName, deviceSuffix])
+        self.createCertificateIfNecessary(force=True)
 
 
-    def createCertificateIfNecessary(self):
+    def createCertificateIfNecessary(self, force=False):
         # check ndn-sec output for a certificate for the requested identity
         # if absent, generate a new cert and put it in ~/.certs
         networkName = self.currentConfig["device/environmentPrefix"][0].value
@@ -172,10 +168,11 @@ class ConfigManager(Dialog):
             pass
 
         
-        proc = Popen(["ndnsec", "cert-dump", "-i", deviceName], stdout=PIPE, 
-                stderr=nullFile)
-        certData, err = proc.communicate()
-        if proc.returncode == 1:
+        if not force:
+            proc = Popen(["ndnsec", "cert-dump", "-i", deviceName], stdout=PIPE, 
+                    stderr=nullFile)
+            certData, err = proc.communicate()
+        if force or proc.returncode == 1:
             # certificate (identity??) not found
 
             # TODO: why does this make the identity default, but not if typed
@@ -208,6 +205,7 @@ class ConfigManager(Dialog):
         if len(newOutputFile) == 0:
             return # cancel save
         try:
+            self.createCertificateIfNecessary()
             self.currentConfig.write(newOutputFile)
             self.inputFile = self.outputFile = newOutputFile
         except IOError:
@@ -428,7 +426,6 @@ class ConfigManager(Dialog):
     def displayMenu(self):
         menuItems = self.createMainMenuItems()
         toEdit = self.mainMenu('Select an option', menuItems ).value
-                
         
         # on cancel, we get an empty string
         if len(toEdit) > 0:
@@ -439,10 +436,14 @@ class ConfigManager(Dialog):
         else: 
             self.quit()
 
-
     def main(self):
         while True:
             self.displayMenu()
 
-if __name__ == '__main__':
-    ConfigManager(None).main()
+    def quietMain(self):
+        # just for generating certificates
+        if len(self.inputFile) == 0:
+            raise RuntimeError("No input file given")
+        self.createCertificateIfNecessary()
+        
+

@@ -22,11 +22,35 @@ from __future__ import print_function
 from ndn_pi.config.config_manager import ConfigManager
 import sys
 
-if len(sys.argv) > 2:
+def print_usage():
+    usageStr = 'Usage: ndn-config [-h] [[-q] filename]\n'
+    usageStr += '\t-h,--help\t\tPrint this message\n'
+    usageStr += '\t-q\t\tQuick: generate certificates only\n'
+    usageStr += '\tfilename\t\tThe configuration file to load\n'
+    print(usageStr)
+
+args = sys.argv[:]
+if '-h' in args or '--help' in args:
+    print_usage()
+    sys.exit(0)
+
+try:
+    args.remove('-q')
+except ValueError:
+    quietMode = False
+else:
+    quietMode = True
+
+
+
+if len(args) > 2:
         print("Ignoring extra args: {}".format(' '.join(sys.argv[2:])), file=sys.stderr)
-if len(sys.argv) > 1:
-        fileName = sys.argv[1]
+if len(args) > 1:
+        fileName = args[1]
 else:
         fileName = None
 
-ConfigManager(fileName).main()
+if not quietMode:
+    ConfigManager(fileName).main()
+else:
+    ConfigManager(fileName).quietMain()
