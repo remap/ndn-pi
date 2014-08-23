@@ -17,32 +17,21 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # A copy of the GNU General Public License is in the file COPYING.
 
-from pyndn import Name
+from pyndn import Name, Data
 from pyndn.encoding import ProtobufTlv
 from util.common import Common
+from ndn_pi.iot_node import IotNode
 from app.cec import CecDevice, CecCommand
 import app.cec_messages_pb2 as pb
 import subprocess
 import time
 
-class CecTv(object):
-    def __init__(self, loop, face, keyChain, discoveree):
-        self._loop = loop
-        self._face = face
-        self._keyChain = keyChain
-
-        self._serial = Common.getSerial()
-
-        discoveree.addFunction("cec", self._serial)
-
-        # Register /home/cec/<cec-id> to listen for command interests to control tv
-        self._face.registerPrefix(Name("/home/cec").append(self._serial), self.onInterestCec, self.onRegisterFailed)
-        self._face.registerPrefix(Name("/home/cec").append(self._serial).append("capabilities"), self.onInterestCecCapabilities, self.onRegisterFailed)
+class CecTv(IotNode):
         
     def processCommands(self, message):
         PI = CecDevice.RECORDING_1
         # TODO: FORK SEPARATE THREAD FOR THIS
-        print "processCommands:", message.commands
+        self.log.debug("processCommands: "+ str(message.commands))
         if message.destination == pb.TV:
             processedDestination = CecDevice.TV
         elif message.destination == pb.RECORDING_1:
@@ -67,7 +56,7 @@ class CecTv(object):
                 (out, err) = cecClient.communicate(input=processedCommand)
             elif command == pb.PLAY:
                 #processedCommand = CecCommand.PLAY
-                subprocess.check_call(["omxplayer", "-o", "hdmi", "/home/pi/YOUSHALLNOTPASS.mp4"])
+                subprocess.check_call(["omxplayer", "-o", "hdmi", "small.mp4"])
             elif command == pb.PAUSE:
                 cecClient = subprocess.Popen(["cec-client", "-s", "-d", "1"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
                 processedCommand = "tx " + format(PI, '01x') + format(processedDestination, '01x') + ":" + CecCommand.PAUSE
@@ -115,33 +104,22 @@ class CecTv(object):
             elif command is pb.SLEEP:
                 time.sleep(1.15)
 
-    def onInterestCec(self, prefix, interest, transport, registeredPrefixId):
-        print "onInterestCec", interest.getName().toUri()
+    def onCecCommand(self, interest):
+        self.log.debug("Received CEC command")
         # check command interest name
         # verify command interest
         #self._face.verifyCommandInterest(interest)
         message = pb.CommandMessage()
         ProtobufTlv.decode(message, interest.getName().get(3).getValue())
         self.processCommands(message)
+
+        data = Data(interest.getName())
+        data.setContent('ACK')
+        return data
         # check tv status
         # turn on and play
         # publish state data
 
-    def onInterestCecCapabilities(self, prefix, interest, transport, registeredPrefixId):
-        print "onInterestCecCapabilities", interest.getName().toUri()
-
-        #data = Data(Name(prefix))
-        # set capabilities
-        #capabilitiesMessage = pb.CapabilitiesMessage()
-        #content = capabilities.SerializeToString()
-        #data.setContent(content)
-        #data.getMetaInfo().setFreshnessPeriod(60000) # 1 minute, in milliseconds
-
-        #self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
-        #encodedData = data.wireEncode()
-        #transport.send(encodedData.toBuffer())
-
-    def onRegisterFailed(self, prefix):
-        print "Register failed for prefix", prefix.toUri()
-
-
+if __name__ == '__main__':
+    node = CecTv('cec_tv.conf')
+    node.start()

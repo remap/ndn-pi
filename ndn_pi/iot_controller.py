@@ -40,7 +40,7 @@ class IotController(IotNode):
     def __init__(self, configFilename):
         super(IotController, self).__init__(configFilename)
 
-        # the controller keeps a directory of device prefix->capabilities
+        # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
 
     def createCertificateIfNecessary(self, commandParamsTlv):
@@ -80,8 +80,8 @@ class IotController(IotNode):
 
         certificate = IdentityCertificate(certificateName)
         # certificate expects time in milliseconds
-        certificate.setNotBefore(timestamp)
-        certificate.setNotAfter((timestamp + 30*86400)) # about a month
+        certificate.setNotBefore(timestamp*1000)
+        certificate.setNotAfter((timestamp*1000 + 30*86400)) # about a month
 
         certificate.setPublicKeyInfo(publicKey)
 
@@ -91,7 +91,7 @@ class IotController(IotNode):
 
         # sign this new certificate
         certificate.encode()
-        self._keychain.sign(certificate, self._defaultCertName)
+        self._keyChain.sign(certificate, self._keyChain.getDefaultCertificateName())
 
         return certificate
 

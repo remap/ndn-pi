@@ -110,8 +110,9 @@ class Consumer(IotNode):
     # TODO: verification/signing
     def onDataPir(self, interest, data):
         self._callbackCountData += 1
-        self.log.debug("Got data: " + data.getName().toUri())
-        self.log.debug("\tContent: " + data.getContent().toRawStr())
+        debugStr = "Got data: " + data.getName().toUri()
+        debugStr += "\tContent: " + data.getContent().toRawStr()
+        self.log.debug(debugStr)
 
         # Extract info from data packet
         payload = json.loads(data.getContent().toRawStr())
@@ -145,12 +146,13 @@ class Consumer(IotNode):
 
             self._face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
             self._countExpressedInterests += 1
-            self.log.debug("Sent interest: " + interest.getName().toUri())
-            self.log.debug("\tExclude: " + interest.getExclude().toUri())
-            self.log.debug("\tLifetime: " + str(interest.getInterestLifetimeMilliseconds()))
+            debugStr = "Sent interest: " + interest.getName().toUri()
+            debugStr += "\tExclude: " + interest.getExclude().toUri()
+            debugStr += "\tLifetime: " + str(interest.getInterestLifetimeMilliseconds())
  
+            self.log.debug(debugStr)
         # Reschedule again in 0.5 sec
-        self._loop.call_later(0.5, self.expressInterestPirAndRepeat)
+        self._loop.call_later(1.0, self.expressInterestPirAndRepeat)
 
     # Cec Control
     def onDataCec(self, interest, data):
@@ -171,7 +173,6 @@ class Consumer(IotNode):
                 message = pb.CommandMessage()
                 message.destination = pb.TV
                 message.commands.append(pb.AS)
-                message.commands.append(pb.SLEEP)
                 message.commands.append(pb.SLEEP)
                 message.commands.append(pb.PLAY)
                 encodedMessage = ProtobufTlv.encode(message)
