@@ -50,6 +50,9 @@ class Dialog(object):
         cmd.extend(['--'+control, msg , str(self.height), str(self.width)])
         cmd.extend(list(postExtra))
 
+        print (' '.join(cmd))
+        import time; time.sleep(2)
+
         p = Popen(cmd, stderr=PIPE)
         out, err = p.communicate()
         if self.auto_exit and p.returncode in exit_on:
@@ -82,7 +85,7 @@ class Dialog(object):
     def mainMenu(self, msg='', items=(), preExtras=(), prefix = ' ', postExtras=(),
                 okLabel='Select'):
         allPreExtras = list(preExtras)
-        allPreExtras.extend(['--nocancel', '--hfile', '.HELP'])
+        allPreExtras.extend(['--nocancel', '--hfile', 'help/NDNConfig.help'])
         allPreExtras.extend(['--ok-label', okLabel])
 
         return self.menu(msg=msg, items=items, preExtras=allPreExtras, prefix=prefix, extras=postExtras)

@@ -55,9 +55,9 @@ class ConfigManager(Dialog):
         self.hasChanges = False
 
         self.optionsList = (('Edit newtork name settings', self.editNameInformation),
-                            ('Set certificate search directories', self.setCertDirectories), 
-                            ('Regenerate device certificate', self.regenerateCertificate),
                             ('Edit command list', self.configureCommands),
+                            #('Set certificate search directories', self.setCertDirectories), 
+                            ('Regenerate device certificate', self.regenerateCertificate),
                             ('Save configuration', self.saveConfig), 
                             ('Load configuration', self.loadConfig),
                             ('Revert unsaved changes', self.reloadConfig),
@@ -88,7 +88,8 @@ class ConfigManager(Dialog):
 
         accept = False
         while not accept:
-            retCode, values = self.form(formFieldInfo=fields)
+            retCode, values = self.form(formFieldInfo=fields, 
+                    preExtras=['--hfile', 'help/DeviceName.help'])
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:
                 break
             newNetworkPrefix = values[0].strip('/')
@@ -263,7 +264,8 @@ class ConfigManager(Dialog):
         while not accept:
             fields = self.prepareCommandInfoFormFields(commandInfo)
             retCode, values = self.form(formFieldInfo=fields, 
-                     extraLabel='Toggle signed')
+                     extraLabel='Toggle signed', 
+                     preExtras=['--hfile', 'help/CommandEditor.help'])
         
             newName = values[0] if len(values) > 0 else ''
             newFuncName = values[1] if len(values) > 1 else ''
@@ -338,7 +340,9 @@ class ConfigManager(Dialog):
             if len(commandNameList) == 0:
                 commandNameList = [dummyName]
 
-            retCode, value = self.insertDeleteMenu('', commandNameList, deleteLabel='Delete')
+            retCode, value = self.insertDeleteMenu('', commandNameList, 
+                    deleteLabel='Delete', 
+                    preExtras=['--hfile', 'help/CommandManager.help'])
 
             if value == dummyName and (retCode == self.DIALOG_OK or retCode == self.DIALOG_HELP):
                 # can't edit/delete when there are no commands
@@ -372,7 +376,7 @@ class ConfigManager(Dialog):
     ####
 
     def setCertDirectories(self):
-        dummyName = '--- NO VERIFICATION --- '
+        dummyName = '--- NO DIRECTORIES --- '
         exit = False
         while not exit:
             allDirs = []
@@ -385,7 +389,9 @@ class ConfigManager(Dialog):
                 
             # apparently having no 'ok' button wth an extra button messes 
             # up dialog's return codes...
-            retCode, value = self.insertDeleteMenu('', allDirs, deleteLabel='Delete', editLabel='Add', insertLabel=None)
+            retCode, value = self.insertDeleteMenu('', allDirs, deleteLabel='Delete', 
+                    editLabel='Add', insertLabel=None, 
+                    preExtras=['--hfile', 'help/CertificateDirectory.help'])
             if value == dummyName and retCode == self.DIALOG_HELP:
                 continue
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:

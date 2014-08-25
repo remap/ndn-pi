@@ -1,0 +1,8 @@
+CERTIFICATE DIRECTORY
+=====================
+
+The Named Data Network architecture uses digital signatures and 
+certificates to establish the identity of devices and ensure that
+commands and data are coming from known, authorized devices.
+
+This setting allows you to specify a

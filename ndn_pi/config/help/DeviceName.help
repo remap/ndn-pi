@@ -1,0 +1,28 @@
+NETWORK NAME SETTINGS
+=====================
+
+Network Name
+------------
+
+All Raspberry Pis must have the same network name set in order to 
+communicate. 
+
+Device Name
+-----------
+The device name is used to identify a network device. One 
+Raspberry Pi may run more than one device node by creating multiple 
+configuration files. The device name is used as a prefix for all 
+commands associated with a device, and is also used for issuing and 
+verifying network certificates.
+
+If the device name and controller name are the same, it is assumed that
+this node will act as the controller.
+
+Controller Name
+---------------
+The controller is a special device in your named data network, and it 
+is not recommended to have more than one controller in the same network.
+The controller is responsible for issuing network certificates and 
+keeping a directory of available commands. Apart from these 
+responsibilities, the controller behaves like any other network node.
+
