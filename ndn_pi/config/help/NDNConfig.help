@@ -25,13 +25,7 @@ The Named Data Network architecture uses digital signatures and
 certificates to establish the identity of devices and ensure that
 commands and data are coming from known, authorized devices.
 
-3] Set certificate save directory
---------------------------
-Specifies where on disk the certificates generated for this device
-should be saved. Default is in the current user's home directory
-($HOME/.ndn_iot).
-
-4] Regenerate device certificates
+3] Regenerate device certificates
 --------------------------
 This option will create new keys for the current device, but does
 not remove any previous keys from disk.
@@ -40,17 +34,17 @@ not remove any previous keys from disk.
 FILE OPERATIONS
 **************************
 
-5] Save configuration
+4] Save configuration
 --------------------------
 This saves the current configuration to disk, overwriting any existing
 configuration with the same name.
 
-6] Load configuration
+5] Load configuration
 --------------------------
 This loads a configuration file from disk, discarding any unsaved 
 changes to the current configuration.
 
-7] Quit
+6] Quit
 --------------------------
 Exit the NDN Configuration Utility. You will be prompted to save any
 changes.
