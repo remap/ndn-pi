@@ -52,8 +52,6 @@ class ConfigManager(Dialog):
         self.backtitle = 'F1 - Help\tEsc - Exit'
         self.auto_exit = False
 
-	self.defaultCertDirectory = '/usr/local/etc/ndn/iot_certs'
-
         self.hasChanges = False
 
         self.optionsList = (('Edit newtork name settings', self.editNameInformation),
@@ -161,9 +159,15 @@ class ConfigManager(Dialog):
 
         # certificate is in stdout of ndnsec commands
         # save to disk and install if necessary (just generated)
-        
-        fileName = "{}.cert".format(deviceName.replace('/', '_'))
-        certName = os.path.join(self.defaultCertDirectory, fileName)
+        userCertDirectory = os.path.expanduser("~/.ndn/iot_certs")
+        fileName = "default{}.cert".format(deviceName.replace('/', '_'))
+        certName = os.path.join(userCertDirectory, fileName)
+        try:
+            os.makedirs(userCertDirectory)
+            # may fail because it exists or can't be made, can't tell
+        except:
+            pass
+
         
         if not force:
             proc = Popen(["ndnsec", "cert-dump", "-i", deviceName], stdout=PIPE, 
