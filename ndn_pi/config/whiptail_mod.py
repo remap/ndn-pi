@@ -50,9 +50,6 @@ class Dialog(object):
         cmd.extend(['--'+control, msg , str(self.height), str(self.width)])
         cmd.extend(list(postExtra))
 
-        print (' '.join(cmd))
-        import time; time.sleep(2)
-
         p = Popen(cmd, stderr=PIPE)
         out, err = p.communicate()
         if self.auto_exit and p.returncode in exit_on:
