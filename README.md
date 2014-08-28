@@ -1,8 +1,8 @@
 Internet of Things Toolkit
 ==========================
 using
-Named Data Network
-===================
+Named Data Networking
+=====================
 
  Getting Started
 ---------------------------------
