@@ -1,51 +1,62 @@
-ndn-pi
-======
+HDMI-CEC TV controller
+======================
 
-Prerequisites
--------------
-* Required: Python 2.7 or later
-* Required: [NFD](https://github.com/named-data/NFD)
-* Required: [PyNDN2](https://github.com/named-data/PyNDN2)
-* Required: trollius (for asyncio in Python 2.7)
-* Required: [libcec](https://github.com/Pulse-Eight/libcec)
 
-Running
----
-Make sure you've already done:
+This network reads any available passive infrared sensors (PIRs) to determine room occupancy.
+It turns connected TVs off if all sensors report no occupancy, and turns TVs on if more than 2
+nodes report occupancy.
 
-    export PYTHONPATH=$PYTHONPATH:<PyNDN root>/python
+Node Types
+----------
 
-On pir pi:
+###Controller
 
-    nfd-start
-    nfdc register /home 2
-    sudo python app/occupancy_node_1.py
+The controller in this network has no special function: it listens for certificate requests and device listing requests.
 
-On consumer/cec pi:
+###PIR Publisher Node
 
-    nfd-start
-    nfdc register /home 3
-    python app/hdmi_cec_node.py (either in separate terminal or background)
-    python app/consumer.py
+This node handles requests for PIR status by reading PIRs attached to the GPIO pins (by default 25 and 18).
 
-Note about `nfdc register <prefix> <faceId>`:
+###CEC TV Node
 
-`<faceId>` should be the udp multicast face, which can be attained via nfd-status - it's the line with `udp4://224.0.23.170:56363`
+This node sends commands to a CEC-enabled device attached to the HDMI output of the Raspberry Pi.
 
-Typically, for the gateway (because it has 2 IP addresses), faceId=3, for non-gateways, faceId=2.
+### Consumer Node
+This node searches for nodes with 'pir' and 'cec' capabilities. It periodically reads the status of all PIR sensors,
+and issues commands to the TV.
 
-License
+Setup
 -------
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
+### PIR Publisher
+This node expects two passive infrared sensors connected to pins 25 and 18. The number and placement of PIR sensors
+can be changed by editing 'pir.conf' with `ndn-config`.
 
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <http://www.gnu.org/licenses/>.
-A copy of the GNU General Public License is in the file COPYING.
+<Insert wiring diagram?>
+
+### CEC TV Node
+This node expects to be connected to an HDMI-CEC enabled television/monitor.
+
+### Network Setup      
+See the README.md in (ndn-pi path?) for NDN setup steps.    
+
+Running the Example
+-------------------
+
+The controller node should be started first, using:
+
+        python -m ndn_pi.iot_controller &
+
+The CEC controller and PIR publisher nodes require root access:
+
+        sudo -E ./cec_tv.py cec_tv.conf &
+
+and
+
+	    sudo -E ./pir_publisher.py pir.conf &
+
+
+The consumer can be run using
+        
+        ./consumer.py consumer.conf&
+

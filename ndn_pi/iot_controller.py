@@ -2,13 +2,14 @@
 import logging
 import time
 import sys
+import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
 from pyndn.security import KeyChain
 from pyndn.security.identity import IdentityManager
 from pyndn.security.policy import ConfigPolicyManager
-from pyndn.security.certificate import IdentityCertificate
+from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 
 from iot_identity_storage import IotIdentityStorage
@@ -44,7 +45,7 @@ class IotController(IotNode):
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
 
-    def createCertificateIfNecessary(self, commandParamsTlv):
+    def _createCertificateIfNecessary(self, commandParamsTlv):
         # look up the certificate and return its name if it exists
         # if not, generate one, install it,  and return its name
 
@@ -68,11 +69,11 @@ class IotController(IotNode):
             keyDer = Blob(message.command.keyBits)
             keyType = message.command.keyType
             publicKey = PublicKey(keyType, keyDer)
-            certificate = self.createCertificateForKey(keyName, publicKey)
+            certificate = self._createCertificateForKey(keyName, publicKey)
             self._identityStorage.addCertificate(certificate)
             return certificate
 
-    def createCertificateForKey(self, keyName, publicKey):
+    def _createCertificateForKey(self, keyName, publicKey):
         timestamp = (time.time())
 
         # TODO: put the 'KEY' part after the environment prefix to be responsible for cert delivery
@@ -96,7 +97,7 @@ class IotController(IotNode):
 
         return certificate
 
-    def updateDeviceCapabilities(self, interest):
+    def _updateDeviceCapabilities(self, interest):
 
         # we assume the sender is the one who signed the interest...
         signature = self._policyManager._extractSignature(interest)
@@ -127,9 +128,9 @@ class IotController(IotNode):
                             'name':capabilityPrefix.toUri()}
                     self._directory[keyword].append(listing)
 
-    def prepareCapabilitiesList(self, interestName):
+    def _prepareCapabilitiesList(self, interestName):
         """
-        Returns a JSON representation instead of a protobuf
+        Returns a JSON representation for easy use
         """
         try:
             suffix = interestName.get(self.prefix.size()+1).toEscapedString()
@@ -147,20 +148,20 @@ class IotController(IotNode):
 
         return response
 
-    def onCommandReceived(self, prefix, interest, transport, prefixId):
+    def _onCommandReceived(self, prefix, interest, transport, prefixId):
         # handle the built-in commands, else use default behavior
         interestName = interest.getName()
         afterPrefix = interestName.get(prefix.size()).toEscapedString()
         if afterPrefix == "listDevices":
             #compose device list
             self.log.debug("Received device list request")
-            response = self.prepareCapabilitiesList(interestName)
+            response = self._prepareCapabilitiesList(interestName)
             self.sendData(response, transport)
         elif afterPrefix == "certificateRequest":
             #build and sign certificate
             self.log.debug("Received certificate request")
             paramsComponent = interest.getName().get(prefix.size()+1)
-            certData = self.createCertificateIfNecessary(paramsComponent)
+            certData = self._createCertificateIfNecessary(paramsComponent)
 
             response = Data(interest.getName())
             if certData is not None:
@@ -176,16 +177,16 @@ class IotController(IotNode):
                 response = Data(interest.getName())
                 response.setContent(str(time.time()))
                 self.sendData(response, transport)
-                self.updateDeviceCapabilities(interest)
+                self._updateDeviceCapabilities(interest)
             self._keyChain.verifyInterest(interest, 
                     onVerifiedCapabilities, self.verificationFailed)
         else:
-            super(IotController, self).onCommandReceived(prefix, interest, transport, prefixId)
+            super(IotController, self)._onCommandReceived(prefix, interest, transport, prefixId)
 
     def onStartup(self):
         if not self._policyManager.hasRootSignedCertificate():
             #this is an ERROR - we are the root!
-            self.log.critical("Controller has no certificate! Try running ndn-config.")
+            self.log.critical("Controller has no certificate! Try running ndn-config with the configuration file.")
             self.stop()
 
 

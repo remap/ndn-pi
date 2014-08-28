@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Copyright (C) 2014 Regents of the University of California.
 # Author: Spencer Sutterlin <ssutterlin1@ucla.edu>
 # 
@@ -29,6 +30,7 @@ except ImportError:
     import trollius as asyncio
 
 from ndn_pi.iot_node import IotNode
+import logging
 
 class PirPublisher(IotNode):
     def __init__(self, configFileName):
@@ -51,6 +53,7 @@ class PirPublisher(IotNode):
             self._pirs[pin] = {"device":pir, "lastVal":pir.read(), "lastTime":int(time.time()*1000)}
 
         self._count = 0
+        self.setLogLevel(logging.DEBUG)
 
     def onReadPir(self, interest):
         # try to find a matching pir

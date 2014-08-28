@@ -16,6 +16,7 @@ Extending the LED control example
 ### Adding an LED node
 The easiest way to extend the LED control network is to add another node that provides the
 same LED service. To do that, load the configuration file for the simple LED node using
+
 	    ndn-config led.conf
 
 First, save the configuration to a new file, e.g. `led2.conf`, so that we don't override the
@@ -25,7 +26,8 @@ device information, ndn-config will create and save network certificates for the
 You should not need to make any other changes to the configuration.    
 
 Now you may run the new node, using
-        sudo -E ./led_node led2.conf &
+
+        sudo -E ./led_node.py led2.conf &
 
 Be sure to use your new configuration file name in place of `led2.conf`.    
 
@@ -42,15 +44,18 @@ another node.
 
 Another way to extend the network is to add more LEDs to the multi-LED node. Open
 the configuration for the multi-LED node with
+
 	ndn-config led_multi.conf
 
 Go to 'Edit command list' and look at the two defined commands. They are in the form
+
 	    setLight/[pin number]
 
 The multi-LED node contains logic that looks for pin numbers in commands on startup and
 when a command interest is received. You may move LEDs by changing the pin number at the end
 of the command, or add pins by adding a similar command. For example, to add an LED on pin 18,
 add a new command with the following fields:    
+
 	    Command name:  	setLight/18
 	    Function name: 	onLightCommand
 	    Keyword(s): led
@@ -66,3 +71,4 @@ can be restricted to nodes that have registered with the controller. By default,
 certificates from the controller on startup, but they are not used unless another node requires signed 
 commands.
 
+In the example, 

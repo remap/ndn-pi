@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Copyright (C) 2014 Regents of the University of California.
 # Author: Spencer Sutterlin <ssutterlin1@ucla.edu>
 # 
@@ -121,5 +122,7 @@ class CecTv(IotNode):
         # publish state data
 
 if __name__ == '__main__':
+    import logging
     node = CecTv('cec_tv.conf')
+    node.setLogLevel(logging.DEBUG)
     node.start()

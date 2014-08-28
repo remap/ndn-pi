@@ -1,3 +1,4 @@
+#!/usr/bin/python
 # Copyright (C) 2014 Regents of the University of California.
 # Author: Spencer Sutterlin <ssutterlin1@ucla.edu>
 # Modified by: Adeola Bannis <thecodemaiden@gmail.com>
@@ -107,7 +108,6 @@ class Consumer(IotNode):
         return None
 
     # Pir Consumption
-    # TODO: verification/signing
     def onDataPir(self, interest, data):
         self._callbackCountData += 1
         debugStr = "Got data: " + data.getName().toUri()
