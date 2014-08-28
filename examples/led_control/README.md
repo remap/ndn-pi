@@ -25,8 +25,8 @@ offers an 'led' capability.
 Setup
 -------
 
-You may run these three nodes on one or more Raspberry Pis. The simple LED node (led_node.py) 
-expects to have an LED connected to BCM pin 24. The multiple LED node (led_multi_node.py) is
+You may run these three nodes on one or more Raspberry Pis. The simple LED node (led\_node.py) 
+expects to have an LED connected to BCM pin 24. The multiple LED node (led\_multi\_node.py) is
 initially configured to have LEDs on pins 24 and 17.
 
 <Insert wiring diagram?>
@@ -37,14 +37,15 @@ Running the Example
 -------------------
 
 The controller node should be started first, using:
-        ./iot_controller.py 
+        python -m ndn_pi.iot_controller &
 
 Then the led nodes can be run using:
-        sudo -E ./led_node.py 
-	sudo -E ./led_multi_node.py
+        sudo -E ./led_node.py &
+or
+	    sudo -E ./led_multi_node.py &
 
 And the viewer node can be run using:
-        ./viewer_node.py 
+        ./viewer_node.py &
 
 Only the viewer node is user-interactive. It presents a list of nodes on the
  network offering the 'led' capability, which can be refreshed by pressing Enter.

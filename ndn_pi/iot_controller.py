@@ -4,6 +4,7 @@ import time
 import sys
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
+from pyndn.util import Blob
 from pyndn.security import KeyChain
 from pyndn.security.identity import IdentityManager
 from pyndn.security.policy import ConfigPolicyManager
@@ -187,3 +188,13 @@ class IotController(IotNode):
             self.log.critical("Controller has no certificate! Try running ndn-config.")
             self.stop()
 
+
+if __name__ == '__main__':
+    try:
+        fileName = sys.argv[1]
+    except IndexError:
+        fileName = '/usr/local/etc/ndn_iot/controller.conf'
+      
+        
+    n = IotController(fileName)
+    n.start()

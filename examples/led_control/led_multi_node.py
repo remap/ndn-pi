@@ -1,4 +1,4 @@
-
+#!/usr/bin/python
 # -*- Mode:python; c-file-style:"gnu"; indent-tabs-mode:nil -*- */
 #
 # Copyright (C) 2014 Regents of the University of California.
@@ -64,5 +64,11 @@ class LedNode(IotNode):
         return response
 
 if __name__ == '__main__':
-    node = LedNode('led_multi.conf')
+    import sys
+    import os
+    try:
+	    fileName = sys.argv[1]
+    except IndexError:
+        fileName = os.path.join(os.path.dirname(__file__), 'led_multi.conf')
+    node = LedNode(fileName)
     node.start()

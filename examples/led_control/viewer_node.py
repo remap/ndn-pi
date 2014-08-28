@@ -1,3 +1,24 @@
+
+#!/usr/bin/python
+# -*- Mode:python; c-file-style:"gnu"; indent-tabs-mode:nil -*- */
+#
+# Copyright (C) 2014 Regents of the University of California.
+# Author: Adeola Bannis <thecodemaiden@gmail.com>
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# A copy of the GNU General Public License is in the file COPYING.
+
 from __future__ import print_function
 from ndn_pi.iot_node import IotNode
 from pyndn import Name, Data, Interest
@@ -10,9 +31,7 @@ except ImportError:
     from trollius import Return, From
 
 class ViewerNode(IotNode):
-    def __init__(self, filename=None):
-        if filename is None:
-            filename = 'viewer.conf'
+    def __init__(self, filename):
         super(ViewerNode, self).__init__(filename)
         self._networkListing = {}
         self._lastPresentedList = []
@@ -36,7 +55,7 @@ class ViewerNode(IotNode):
         menuStr = ''
         try:
             # keep old state in case the device list updates while the user is thinking
-            self._lastPresentedList = self._networkListing["light"]
+            self._lastPresentedList = self._networkListing["led"]
         except KeyError:
             self._lastPresentedList = []
         else:
@@ -45,7 +64,7 @@ class ViewerNode(IotNode):
                 signInfo = "signed" if info["signed"] else "unsigned"
                 menuStr += '\t{}: {} ({})\n'.format(i, info["name"], signInfo)
                 i += 1
-            menuStr += 'Enter "on <n>" or "off <n>" to turn a light on or off\n'
+            menuStr += 'Enter "on <n>" or "off <n>" to turn an LED on or off\n'
         menuStr += 'Enter "quit" to quit, anything else to refresh device list.'
 
         print(menuStr)
@@ -92,33 +111,11 @@ class ViewerNode(IotNode):
         self._face.expressInterest(interestName, self.onReceivedList, self.onTimeout)
 
 if __name__ == '__main__':
-    node = ViewerNode()
+    import sys
+    import os
+    try:
+	    fileName = sys.argv[1]
+    except IndexError:
+        fileName = os.path.join(os.path.dirname(__file__), 'viewer.conf')
+    node = ViewerNode(fileName)
     node.start()
-
-"""
-        self._stdinSelector = selectors.DefaultSelector()
-        self._stdinSelector.register(stdin, selectors.EVENT_READ, self.handleUserInput)
-
-    def setupComplete(self):
-        self._loop.call_soon(self.getDeviceList)
-        self._loop.call_soon(self.displayMenu)
-
-    def onTimeout(self, interest):
-        #try again
-        self.log.warn('Timeout on device list')
-        self._loop.call_later(5, self.getDeviceList)
-
-    def onReceivedList(self, interest, data):
-        print ("Received:\n{}".format(data.getContent().toRawStr()))
-        self._loop.call_later(30, self.getDeviceList)
-
-    def displayMenu(self):
-        print (self._networkListing)
-        print (">", end="", flush=True)
-
-        events = self._stdinSelector.select()
-        for (key, _) in events:
-            callback = key.data
-            inputStr = key.fileobj.readline()
-            callback(inputStr)
-"""
