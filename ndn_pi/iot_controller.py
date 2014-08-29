@@ -205,7 +205,7 @@ if __name__ == '__main__':
     try:
         fileName = sys.argv[1]
     except IndexError:
-        fileName = '/usr/local/etc/ndn_iot/controller.conf'
+        fileName = '/usr/local/etc/ndn/iot/controller.conf'
       
         
     n = IotController(fileName)

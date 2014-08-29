@@ -106,6 +106,6 @@ if __name__ == '__main__':
     try:
 	    fileName = sys.argv[1]
     except IndexError:
-        fileName = '/usr/local/etc/ndn_iot/default.conf'
+        fileName = '/usr/local/etc/ndn/iot/default.conf'
     node = ConsoleNode(fileName)
     node.start()
