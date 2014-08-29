@@ -113,10 +113,9 @@ class IotNode(object):
             self.stop()
 
     def onRegisterFailed(self, prefix):
-        self.log.warn("Could not register " + prefix.toUri())
         if self._registrationFailures < 5:
             self._registrationFailures += 1
-            self.log.warn("Retry: {}/{}".format(self._registrationFailures, 5)) 
+            self.log.warn("Could not register{}, retry: {}/{}".format(prefix.toUri(), self._registrationFailures, 5)) 
             self._face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
         else:
             self.log.critical("Could not register device prefix, ABORTING")
@@ -263,15 +262,20 @@ class IotNode(object):
         self._loop.call_later(5, self._updateCapabilities)
 
 ###
-# Interest handling
-# Verification of and responses to incoming (command) interests
-##
+# Data handling
+###
+    def signData(self, data):
+        self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
 
     def sendData(self, data, transport, sign=True):
         if sign:
-            self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
+            self.signData(data)
         transport.send(data.wireEncode().buf())
 
+###
+# Interest handling
+# Verification of and responses to incoming (command) interests
+##
     def verificationFailed(dataOrInterest):
         self.log.info("Received invalid" + dataOrInterest.getName().toUri())
 
@@ -291,16 +295,19 @@ class IotNode(object):
 
     def _onCommandReceived(self, prefix, interest, transport, prefixId):
         # if this is a cert request, we can serve it from our store (if it exists)
-        # else we must look in our command list to see if this requires verification
-        # we dispatch directly or after verification as necessary
         certData = self._identityStorage.getCertificate(interest.getName())
         if certData is not None:
+            self.log.info("Serving certificate request")
             # if we sign the certificate, we lose the controller's signature!
             self.sendData(certData, transport, False)
             return
 
+        # else we must look in our command list to see if this requires verification
+        # we dispatch directly or after verification as necessary
+
         # now we look for the first command that matches in our config
         allCommands = self.config["device/command"]
+        self.log.debug("Received {}".format(interest.getName().toUri()))
         
         for command in allCommands:
             fullCommandName = Name(self.prefix).append(Name(str(command["name"][0].value)))
@@ -311,7 +318,8 @@ class IotNode(object):
                 except AttributeError:
                     # command not implemented
                     responseData = self.unknownCommandResponse(interest)
-                    self.sendData(responseData, transport)
+                    if responseData is not None:
+                        self.sendData(responseData, transport)
                     return
             
                 try:
@@ -331,13 +339,9 @@ class IotNode(object):
                     return
                 except Exception as e:
                     self.log.exception("Exception while verifying command", exc_info=True)
-                    responseData = self.unknownCommandResponse(interest)
-                    self.sendData(responseData, transport)
+                    self.verificationFailed(interest)
                     return
-        #if we get here, we really don't know this command
-        responseData = self.unknownCommandResponse(interest)
-        self.sendData(responseData, transport)
-        return
+        #if we get here, just let it timeout
                 
 
 

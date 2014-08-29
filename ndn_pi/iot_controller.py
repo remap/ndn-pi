@@ -45,6 +45,17 @@ class IotController(IotNode):
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
 
+        #add the built-ins
+        listDevicesUri = Name(self.prefix).append('listDevices').toUri()
+        self._directory["directory"].append({'signed': False, 'name':listDevicesUri})
+
+        certificatesUri = Name(self.prefix).append('certificateRequest').toUri()
+        self._directory["certificate"].append({'signed': False, 'name':certificatesUri})
+
+        capabilitiesUri = Name(self.prefix).append('updateCapabilities').toUri()
+        self._directory["capabilities"].append({'signed': True, 'name':capabilitiesUri})
+        
+
     def _createCertificateIfNecessary(self, commandParamsTlv):
         # look up the certificate and return its name if it exists
         # if not, generate one, install it,  and return its name

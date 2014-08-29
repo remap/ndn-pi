@@ -35,7 +35,7 @@ class ConfigManager(Dialog):
         self.currentConfig = BoostInfoParser()
 
         pathName = os.path.dirname(os.path.abspath(__file__))
-        self.baseFile = os.path.join(pathName, '.base.conf')
+        self.baseFile = '/usr/local/etc/ndn_iot/default.conf'
 
         if fileName is None:
             self.inputFile = ''

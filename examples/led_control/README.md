@@ -45,15 +45,19 @@ Running the Example
 -------------------
 
 The controller node should be started first, using:
+
         python -m ndn_pi.iot_controller &
 
 Then the led nodes can be run using:
+
         sudo -E ./led_node.py &
+
 and
 	    sudo -E ./led_multi_node.py &
 
-And the viewer node can be run using:
-        ./viewer_node.py 
+Finally, we can run the viewer node using:
+
+        ./viewer_node.py
 
 Only the viewer node is user-interactive. It presents a list of nodes on the
  network offering the 'led' capability, which can be refreshed by pressing Enter.

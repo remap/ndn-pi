@@ -55,7 +55,6 @@ else:
     elif len(args) > 1:
         fileName = args[1]
     else:
-        print_usage()
-        sys.exit(1)
+        fileName = None
 
     ConfigManager(fileName).main()
