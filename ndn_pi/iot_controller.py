@@ -160,7 +160,7 @@ class IotController(IotNode):
         return response
 
     def _onCommandReceived(self, prefix, interest, transport, prefixId):
-        # handle the built-in commands, else use default behavior
+        # handle the built-in commands, else reject
         interestName = interest.getName()
         afterPrefix = interestName.get(prefix.size()).toEscapedString()
         if afterPrefix == "listDevices":
@@ -192,7 +192,8 @@ class IotController(IotNode):
             self._keyChain.verifyInterest(interest, 
                     onVerifiedCapabilities, self.verificationFailed)
         else:
-            super(IotController, self)._onCommandReceived(prefix, interest, transport, prefixId)
+            response = super(IotController, self).unkownCommandResponse()
+            transport.send(response.wireEncode().buf())
 
     def onStartup(self):
         if not self._policyManager.hasRootSignedCertificate():

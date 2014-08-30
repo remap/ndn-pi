@@ -34,8 +34,8 @@ class ConfigManager(Dialog):
         super(ConfigManager, self).__init__()
         self.currentConfig = BoostInfoParser()
 
-        pathName = os.path.dirname(os.path.abspath(__file__))
-        self.baseFile = '/usr/local/etc/ndn_iot/default.conf'
+        self.pathName = os.path.dirname(os.path.abspath(__file__))
+        self.baseFile = '/usr/local/etc/ndn/iot/default.conf'
 
         if fileName is None:
             self.inputFile = ''
@@ -57,7 +57,7 @@ class ConfigManager(Dialog):
         self.optionsList = (('Edit newtork name settings', self.editNameInformation),
                             ('Edit command list', self.configureCommands),
                             #('Set certificate search directories', self.setCertDirectories), 
-                            ('Regenerate device certificate', self.regenerateCertificate),
+                            ('Regenerate node certificate', self.regenerateCertificate),
                             ('Save configuration', self.saveConfig), 
                             ('Load configuration', self.loadConfig),
                             #('Revert unsaved changes', self.reloadConfig),
@@ -81,7 +81,7 @@ class ConfigManager(Dialog):
         fields = []
         fields.append(Dialog.FormField('Network prefix', 
                 networkPrefixNode.getValue().strip('/')))
-        fields.append(Dialog.FormField('Device name', 
+        fields.append(Dialog.FormField('Node name', 
                 deviceNameNode.getValue()))
         fields.append(Dialog.FormField('Controller name', 
                 controllerNameNode.getValue())) 
@@ -89,7 +89,7 @@ class ConfigManager(Dialog):
         accept = False
         while not accept:
             retCode, values = self.form(formFieldInfo=fields, 
-                    preExtras=['--hfile', 'help/DeviceName.help'])
+                    preExtras=['--hfile', self.helpFileName('DeviceName.help')])
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:
                 break
             newNetworkPrefix = values[0].strip('/')
@@ -103,7 +103,7 @@ class ConfigManager(Dialog):
                 self.alert("Prefix {} is reserved".format(newNetworkPrefix))
                 continue
             elif len(newDeviceName) == 0 or len(newControllerName) == 0:
-                self.alert("Empty device/controller name is not allowed")
+                self.alert("Empty node/controller name is not allowed")
                 continue
             else:
                 accept = True
@@ -153,7 +153,7 @@ class ConfigManager(Dialog):
         deviceSuffix = self.currentConfig["device/deviceName"][0].value
         deviceName = '/'.join([networkName, deviceSuffix])
         
-        self.alert("Please wait, updating device certificates...", showButtons=False)
+        self.alert("Please wait, updating certificates...", showButtons=False)
 
         nullFile = open(os.devnull, 'wb')
 
@@ -182,7 +182,7 @@ class ConfigManager(Dialog):
                     stderr=nullFile)
             certData, err = proc.communicate()
             if proc.returncode == 1:
-                self.alert("ERROR!\nCannot create device certificates!")
+                self.alert("ERROR!\nCannot create certificates!")
 
         # save to file and install - installing the same cert twice is okay
         try:
@@ -192,9 +192,9 @@ class ConfigManager(Dialog):
             returncode = system_call(["ndnsec-cert-install", certName], 
                     stdout=nullFile, stderr=nullFile)
             if returncode != 0:
-                self.alert("ERROR!\nCannot install device certificates!")
+                self.alert("ERROR!\nCannot install certificates!")
         except IOError:
-            self.alert("ERROR!\nCannot save device certificates!")
+            self.alert("ERROR!\nCannot save certificates!")
 
         nullFile.close()
 
@@ -265,7 +265,7 @@ class ConfigManager(Dialog):
             fields = self.prepareCommandInfoFormFields(commandInfo)
             retCode, values = self.form(formFieldInfo=fields, 
                      extraLabel='Toggle signed', 
-                     preExtras=['--hfile', 'help/CommandEditor.help'])
+                     preExtras=['--hfile', self.helpFileName('CommandEditor.help')])
         
             newName = values[0] if len(values) > 0 else ''
             newFuncName = values[1] if len(values) > 1 else ''
@@ -342,7 +342,7 @@ class ConfigManager(Dialog):
 
             retCode, value = self.insertDeleteMenu('', commandNameList, 
                     deleteLabel='Delete', 
-                    preExtras=['--hfile', 'help/CommandManager.help'])
+                    preExtras=['--hfile', self.helpFileName('CommandManager.help')])
 
             if value == dummyName and (retCode == self.DIALOG_OK or retCode == self.DIALOG_HELP):
                 # can't edit/delete when there are no commands
@@ -391,7 +391,7 @@ class ConfigManager(Dialog):
             # up dialog's return codes...
             retCode, value = self.insertDeleteMenu('', allDirs, deleteLabel='Delete', 
                     editLabel='Add', insertLabel=None, 
-                    preExtras=['--hfile', 'help/CertificateDirectory.help'])
+                    preExtras=['--hfile', self.helpFileName('CertificateDirectory.help')])
             if value == dummyName and retCode == self.DIALOG_HELP:
                 continue
             if retCode == self.DIALOG_CANCEL or retCode == self.DIALOG_ESC:

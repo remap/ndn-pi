@@ -35,6 +35,10 @@ class Dialog(object):
         self.width = width
         self.auto_exit = auto_exit
 
+    def helpFileName(self, fileName):
+        return os.path.join(self.pathName, 'help', fileName) 
+
+
     def run(self, control, msg, preExtra= (), postExtra=(), exit_on=(1, 255)):
         cmd = ['dialog']
 
@@ -82,7 +86,7 @@ class Dialog(object):
     def mainMenu(self, msg='', items=(), preExtras=(), prefix = ' ', postExtras=(),
                 okLabel='Select'):
         allPreExtras = list(preExtras)
-        allPreExtras.extend(['--nocancel', '--hfile', 'help/NDNConfig.help'])
+        allPreExtras.extend(['--nocancel', '--hfile', self.helpFileName('NDNConfig.help')])
         allPreExtras.extend(['--ok-label', okLabel])
 
         return self.menu(msg=msg, items=items, preExtras=allPreExtras, prefix=prefix, extras=postExtras)

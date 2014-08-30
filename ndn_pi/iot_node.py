@@ -58,7 +58,7 @@ class IotNode(object):
         self._policyManager = IotPolicyManager(self._identityStorage, configFilename)
 
         deviceSuffix = self.config["device/deviceName"][0].value
-        self.prefix = Name(self._policyManager.getEnvironmentPrefix()).append(deviceSuffix)
+        self.prefix = Name(self._policyManager.getEnvironmentPrefix()).append(Name(deviceSuffix))
         
         self._keyChain = KeyChain(self._identityManager, self._policyManager)
         self._identityStorage.setDefaultIdentity(self.prefix)
@@ -115,7 +115,7 @@ class IotNode(object):
     def onRegisterFailed(self, prefix):
         if self._registrationFailures < 5:
             self._registrationFailures += 1
-            self.log.warn("Could not register{}, retry: {}/{}".format(prefix.toUri(), self._registrationFailures, 5)) 
+            self.log.warn("Could not register {}, retry: {}/{}".format(prefix.toUri(), self._registrationFailures, 5)) 
             self._face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
         else:
             self.log.critical("Could not register device prefix, ABORTING")
