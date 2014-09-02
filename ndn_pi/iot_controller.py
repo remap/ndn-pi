@@ -51,7 +51,7 @@ class IotController(IotNode):
         self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
         self._insertIntoCapabilities('certificateRequest', 'certificate', False)
 
-    def _insertIntoCapabilities(commandName, keyword, isSigned):
+    def _insertIntoCapabilities(self, commandName, keyword, isSigned):
         """
         Add a capability that is not listed in the configuration.
         """

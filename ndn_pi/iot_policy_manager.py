@@ -113,9 +113,9 @@ class IotPolicyManager(ConfigPolicyManager):
             return False
 
     def hasRootSignedCertificate(self):
-        """
-        :return boolean: Whether we've received a network certificate from our controller
-        """
+       """
+       :return boolean: Whether we've received a network certificate from our controller
+       """
        try:
            myCertName = self._identityStorage.getDefaultCertificateNameForIdentity(
                        self._identityStorage.getDefaultIdentity())
