@@ -6,7 +6,8 @@ Named Data Network Internet of Things Toolkit (NDN-IOTT)
 
 The major components of this kit are:
 -	PyNDN: a Python implementation of NDN
--	nfd: the NDN Forwarding Daemon, which routes NDN traffic over IP
+-	nfd: the NDN Forwarding Daemon, which manages connections (faces)
+-   nrd: the NDN Routing Daemon, which routes interests and data 
 -	ndn-config: a command-line utility for setting up new node types
 
 There are other libraries included for further exploration of NDN:
@@ -36,7 +37,7 @@ There is one special node type, the controller. Each network must have a control
 are creating network certificates for all other nodes in the network, and maintaining a list of available 
 services.    
 
-### Node Configuration with Ndn-config
+### Node Configuration with ndn-config
 
 Nodes must be configured with their network setup and command list by running the 
 `ndn-config` utility. This utility prepares network certificates for the node, sets the node 
@@ -151,36 +152,61 @@ This toolkit contains three examples that demonstrate common node and network se
 -	hdmi\_cec: 	Turn a CEC-enabled device on or off depending on room occupancy
 -	content\_store: Save sensor readings for analysis or logging in a MemoryContentCache object
 
-Try running these examples and going through the tutorial [TUTORIAL.md] to learn how nodes work together.
+Try running these examples and going through the tutorial [TUTORIAL.md](TUTORIAL.md) to learn how nodes work together.
 
 Note: In order to access the GPIO pins, an IotNode must be run as root.
 
 
-Advanced Users
---------------
+Writing IoT Nodes
+----------------
 
-###Provided Classes
 
+### Provided Classes
 There are several classes provided as part of the Internet of Things toolkit for NDN. 
 #### IotNode
 
-This is the most important class when setting up a new network. 
-
-The most important methods for subclassing are:
+Nodes in your network will generally be subclasses of IotNode. Besides adding methods for
+interest handling (see ['Edit command list'](#Edit-command-list) above), the following
+methods may also be overridden:
 
 * setupComplete 
+```python
+    def setupComplete(self)
+```
+  This method does nothing by default. It is called once the node has received its network
+certificate from the controller and sent its capabilities list. This is the recommended
+place for customized node behavior, e.g. searching for other nodes, scheduling tasks,
+setting up custom callbacks.
+  
 * unknownCommandResponse
+```python
+    #returns pyndn.Data or None
+    def unknownCommandResponse(self, interest)
+```
+   By default, this method composes an error message and adds 'unknown' to the end of the
+interest name. You may return `None` to silently ignore the unknown interest, or perform
+your own specialized handling of the interest and return a Data packet.
+
 
 Other useful methods are:
 
 * verificationFailed
+```python
+    def verificationFailed(self, dataOrInterest)
+```
+   Called when a command interest fails verification. The most common reasons for failing verification are invalid signatures, and unsigned interests being sent when signed interests are expected. The default implementation logs the failure.
+
 * getSerial
+```python
+    def getSerial(self)
+```
+   Reads the Raspberry Pi serial number from /proc/cpuinfo. Useful if you need some 
+identifier to distinguish Raspberry Pis with the same node name.
+
+------
 
 The remaining classes do not need to be subclassed, and it is not recommended that you modify them
- before you are comfortable with NDN security management. For more information, see:
-
-* [ndn-cxx wiki](http://redmine.named-data.net/projects/ndn-cxx/wiki) for security information
-* [NFD wiki](http://redmine.named-data.net/projects/nfd/wiki) for more on the internals of NDN packetsand forwarding
+ before you are comfortable with NDN security management. For more information, see [NDN Resources](#NDN-Resources).
 
 #### IotController
 
@@ -189,3 +215,11 @@ The remaining classes do not need to be subclassed, and it is not recommended th
 #### IotPolicyManager
 
 #### IotIdentityStorage
+
+NDN Resources
+-----------------
+
+* [NDN Common Client Libraries](http://named-data.net/doc/ndn-ccl-api/) for documentation of the classes available in PyNDN
+* [ndn-cxx wiki](http://redmine.named-data.net/projects/ndn-cxx/wiki) for security information
+* [NFD wiki](http://redmine.named-data.net/projects/nfd/wiki) for more on the internals of NDN packetsand forwarding
+
