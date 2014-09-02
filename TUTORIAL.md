@@ -71,11 +71,44 @@ certificates from the controller on startup, but they are not used unless anothe
 commands.
 
 In the example, the setLight commands do not require signing, meaning that anyone
- can turn the lights on or off, not just an IoT node in your network. To see this, we will make a copy
-of the viewer node configuration with a completely different network name.
+ can turn the lights on or off, not just an IoT node in your network. We will now enforce signing for one of the 
+LEDs in the multi-node. 
+
+This part of the tutorial is best run across at least two Raspberry Pis, as running four nodes at once may overburden
+the NDN forwarder on a single Pi.
+
+First, we will make a copy of the viewer node configuration with a completely different network name.
+
 
 Run 
 
         ndn-config viewer.conf
 
-In 'Edit network name settings', change the 'Network prefix' to something else, such as 
+In 'Edit network name settings', change the 'Network prefix' to something else, such as 'otherhome'. Save this
+as 'other\_viewer.conf'.  
+You will also need to run a controller with the same network name, else the viewer node will not run at all.
+To do this, you may run `ndn-config` with no arguments. Change the network name to match your new network prefix,
+and make sure the controller and device name are the same. For example:
+
+       Network prefix: otherhome
+       Node name: controller
+       Controller name: controller
+
+Save this new configuration as  'other\_controller.conf'. 
+
+
+Finally, we will turn on signing for one of the LEDs in the multi-LED node. Run
+
+        ndn-config led_multi.conf
+
+Go to 'Edit command list' and edit one of the commands. Use the 'Toggle signed' button to make the command signed.
+ Save this configuration under a new name, such as 'led_multi_signed.conf'.
+
+Now, make sure at least the following nodes are running in your network:
+
+    *  Default controller (`python -m ndn_pi.iot_controller`)
+    *  Modified multi-LED node (`sudo -E python led_multi_node.py led_multi_signed.conf`)
+    *  Other controller (`python -m ndn_pi.iot_controller other_controller.conf`)
+    *  Modified viewer (`python viewer.py other_viewer.conf`)
+
+Now try to turn the LEDs on and off. You will find
