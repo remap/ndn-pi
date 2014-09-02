@@ -124,5 +124,4 @@ class CecTv(IotNode):
 if __name__ == '__main__':
     import logging
     node = CecTv('cec_tv.conf')
-    node.setLogLevel(logging.DEBUG)
     node.start()

@@ -1,7 +1,6 @@
-Internet of Things Toolkit
-over
-Named Data Networking
 
+Named Data Network Internet of Things Toolkit (NDN-IOTT)
+=======
 Tutorial
 =========
 
@@ -21,7 +20,7 @@ same LED service. To do that, load the configuration file for the simple LED nod
 
 First, save the configuration to a new file, e.g. `led2.conf`, so that we don't override the
 original settings for the LED node. Then, change the device name using the first option, 
-'Edit device information'. You can choose any name you like. Once you are done editing the
+'Edit network name settings'. You can choose any name you like. Once you are done editing the
 device information, ndn-config will create and save network certificates for the new node.
 You should not need to make any other changes to the configuration.    
 
@@ -29,12 +28,12 @@ Now you may run the new node, using
 
         sudo -E ./led_node.py led2.conf &
 
-Be sure to use your new configuration file name in place of `led2.conf`.    
+If you chose a different name for your new configuration, be sure to use that in place of `led2.conf`.    
 
 If you run the new node and the original LED node on the same Raspberry Pi, you will see two 
 entries in the viewer, but they will control the same LED. This 
 is because both nodes are set up to use the same pin. If you set up another Raspberry Pi with 
-an LED on pin 24, you will be able to control both LEDs.
+an LED on pin 24, you will be able to control each LED separately.
 
 You could also duplicate the viewer node, in order to view and control available LEDs from
 another node.
@@ -45,11 +44,11 @@ another node.
 Another way to extend the network is to add more LEDs to the multi-LED node. Open
 the configuration for the multi-LED node with
 
-	ndn-config led_multi.conf
+	    ndn-config led_multi.conf
 
 Go to 'Edit command list' and look at the two defined commands. They are in the form
 
-	    setLight/[pin number]
+	    setLight/<pin number>
 
 The multi-LED node contains logic that looks for pin numbers in commands on startup and
 when a command interest is received. You may move LEDs by changing the pin number at the end
@@ -71,4 +70,12 @@ can be restricted to nodes that have registered with the controller. By default,
 certificates from the controller on startup, but they are not used unless another node requires signed 
 commands.
 
-In the example, 
+In the example, the setLight commands do not require signing, meaning that anyone
+ can turn the lights on or off, not just an IoT node in your network. To see this, we will make a copy
+of the viewer node configuration with a completely different network name.
+
+Run 
+
+        ndn-config viewer.conf
+
+In 'Edit network name settings', change the 'Network prefix' to something else, such as 

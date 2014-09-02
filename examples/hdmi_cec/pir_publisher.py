@@ -53,7 +53,6 @@ class PirPublisher(IotNode):
             self._pirs[pin] = {"device":pir, "lastVal":pir.read(), "lastTime":int(time.time()*1000)}
 
         self._count = 0
-        self.setLogLevel(logging.DEBUG)
 
     def onReadPir(self, interest):
         # try to find a matching pir
