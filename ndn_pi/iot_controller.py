@@ -38,6 +38,7 @@ class IotController(IotNode):
             new certificate
         - updateCapabilities: should be sent periodically from IotNodes to update their
            command lists
+    It is unlikely that you will need to subclass this node type.
     """
     def __init__(self, configFilename):
         super(IotController, self).__init__(configFilename)
@@ -46,21 +47,23 @@ class IotController(IotNode):
         self._directory = defaultdict(list)
 
         #add the built-ins
-        listDevicesUri = Name(self.prefix).append('listDevices').toUri()
-        self._directory["directory"].append({'signed': False, 'name':listDevicesUri})
+        self._insertIntoCapabilities('listDevices', 'directory', False)
+        self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
+        self._insertIntoCapabilities('certificateRequest', 'certificate', False)
 
-        certificatesUri = Name(self.prefix).append('certificateRequest').toUri()
-        self._directory["certificate"].append({'signed': False, 'name':certificatesUri})
-
-        capabilitiesUri = Name(self.prefix).append('updateCapabilities').toUri()
-        self._directory["capabilities"].append({'signed': True, 'name':capabilitiesUri})
-        
+    def _insertIntoCapabilities(commandName, keyword, isSigned):
+        """
+        Add a capability that is not listed in the configuration.
+        """
+        newUri = Name(self.prefix).append(Name(commandName)).toUri()
+        self._directory[keyword].append({'signed':isSigned, 'name':newUri})
 
     def _createCertificateIfNecessary(self, commandParamsTlv):
-        # look up the certificate and return its name if it exists
-        # if not, generate one, install it,  and return its name
-
-        # NOTE: should we always generate?
+        """
+        Extracts a public key name and key bits from a command interest name component.
+        Look up the certificate corresponding to the key and return its full network 
+        name if it exists. If not, generate one, install it,  and return its name.
+        """
         message = CertificateRequestMessage()
         ProtobufTlv.decode(message, commandParamsTlv.getValue())
 
@@ -85,6 +88,9 @@ class IotController(IotNode):
             return certificate
 
     def _createCertificateForKey(self, keyName, publicKey):
+        """
+        Generate an IdentityCertificate from the public key information given.
+        """
         timestamp = (time.time())
 
         # TODO: put the 'KEY' part after the environment prefix to be responsible for cert delivery
@@ -109,7 +115,9 @@ class IotController(IotNode):
         return certificate
 
     def _updateDeviceCapabilities(self, interest):
-
+        """
+        Take the received capabilities update interest and update our directory listings.
+        """
         # we assume the sender is the one who signed the interest...
         signature = self._policyManager._extractSignature(interest)
         certificateName = signature.getKeyLocator().getKeyName()
@@ -141,8 +149,9 @@ class IotController(IotNode):
 
     def _prepareCapabilitiesList(self, interestName):
         """
-        Returns a JSON representation for easy use
+        Responds to a directory listing request with JSON
         """
+        
         try:
             suffix = interestName.get(self.prefix.size()+1).toEscapedString()
         except IndexError:
@@ -160,6 +169,9 @@ class IotController(IotNode):
         return response
 
     def _onCommandReceived(self, prefix, interest, transport, prefixId):
+        """
+        Does not handle commands set in ndn-config, only the built in commands.
+        """
         # handle the built-in commands, else reject
         interestName = interest.getName()
         afterPrefix = interestName.get(prefix.size()).toEscapedString()

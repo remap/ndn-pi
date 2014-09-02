@@ -52,6 +52,9 @@ class ConsoleNode(IotNode):
         self._loop.call_later(30, self.getDeviceList)
 
     def displayMenu(self):
+        """
+        Displays the last directory listing obtained from the controller.
+        """
         self._lastPresentedList = self._networkListing.copy()
         signingStr = 'ON' if self._shouldSign else 'OFF'
         menuStr = 'Signing is {}\n'.format(signingStr)

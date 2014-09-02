@@ -29,7 +29,8 @@ import base64
 
 class IotIdentityStorage(IdentityStorage):
     """
-    Extend Memory Identity Storage to include the idea of default certs and keys
+    This class stores the controller-generated certificates as well as
+    temporary certificates used for the initial set-up.
     """
     def __init__(self):
         super(IotIdentityStorage, self).__init__()
@@ -421,7 +422,11 @@ class IotIdentityStorage(IdentityStorage):
 
     @staticmethod
     def loadIdentityCertificateFromFile(certFilename):
-        # the file should contain a wireEncode()d IdentityCertificate
+        """
+        Load certificate data from a file. This is expected to be a base64-encoded
+        IdentityCertificate class, encoded with its wireEncode() method.
+        :param str certFilename: The path to the certificate data file
+        """
         with open(certFilename, 'r') as certStream:
             encodedCertLines = certStream.readlines()
             encodedCert = ''.join(encodedCertLines)
