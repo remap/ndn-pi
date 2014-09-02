@@ -113,7 +113,6 @@ class ConfigManager(Dialog):
             deviceNameNode.value = newDeviceName
             controllerNameNode.value = newControllerName
             self.updateTrustRules()
-            self.createCertificateIfNecessary()
             hasChanges = True # should we autosave?
     
     #####

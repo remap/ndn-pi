@@ -210,7 +210,7 @@ class IotNode(object):
         encodedCapabilities = ProtobufTlv.encode(capabilitiesMessage)
         fullCommandName.append(encodedCapabilities)
         interest = Interest(fullCommandName)
-        interest.setInterestLifetimeMilliseconds(3000)
+        interest.setInterestLifetimeMilliseconds(5000)
         self._face.makeCommandInterest(interest)
         self.log.info("Sending capabilities to controller")
         self._face.expressInterest(interest, self._onCapabilitiesAck, self._onCapabilitiesTimeout)
