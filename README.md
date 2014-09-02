@@ -166,7 +166,7 @@ There are several classes provided as part of the Internet of Things toolkit for
 #### IotNode
 
 Nodes in your network will generally be subclasses of IotNode. Besides adding methods for
-interest handling (see ['Edit command list'](#Edit-command-list) above), the following
+interest handling (see ['Edit command list'](#edit-command-list) above), the following
 methods may also be overridden:
 
 * setupComplete 
@@ -206,7 +206,7 @@ identifier to distinguish Raspberry Pis with the same node name.
 ------
 
 The remaining classes do not need to be subclassed, and it is not recommended that you modify them
- before you are comfortable with NDN security management. For more information, see [NDN Resources](#NDN-Resources).
+ before you are comfortable with NDN security management. For more information, see [NDN Resources](#ndn-resources).
 
 #### IotController
 
