@@ -18,49 +18,16 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 """
-This module is based on the MemoryIdentityStorage class
+This module is based on the BasicIdentityStorage class
 """
 from pyndn.util import Blob
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.security.security_exception import SecurityException
 from pyndn import Name, Data
-from pyndn.security.identity.identity_storage import IdentityStorage
+from pyndn.security.identity.basic_identity_storage import BasicIdentityStorage
 import base64
 
-class IotIdentityStorage(IdentityStorage):
-    """
-    This class stores the controller-generated certificates as well as
-    temporary certificates used for the initial set-up.
-    """
-    def __init__(self):
-        super(IotIdentityStorage, self).__init__()
-        # Maps identities to a list of associated keys
-        self._keysForIdentity = {}
-
-        # Maps keys to a list of associated certificates
-        self._certificatesForKey = {}
-
-        # The default identity in identityStore_, or "" if not defined.
-        self._defaultIdentity = ""
-        
-        # The key is the keyName.toUri(). The value is the tuple 
-        #  (KeyType keyType, Blob keyDer).
-        self._keyStore = {}
-        
-        # The key is the key is the certificateName.toUri(). The value is the 
-        #   encoded certificate.
-        self._certificateStore = {}
-
-    def doesIdentityExist(self, identityName):  
-        """
-        Check if the specified identity already exists.
-        
-        :param Name identityName: The identity name.
-        :return: True if the identity exists, otherwise False.
-        :rtype: bool
-        """
-        return identityName.toUri() in self._keysForIdentity
-    
+class IotIdentityStorage(BasicIdentityStorage):
     def addIdentity(self, identityName):
         """
         Add a new identity. An exception will be thrown if the identity already 
@@ -69,40 +36,26 @@ class IotIdentityStorage(IdentityStorage):
         :param Name identityName: The identity name.
         """
         identityUri = identityName.toUri()
-        if identityUri in self._keysForIdentity:
-            raise SecurityException("Identity already exists: " + identityUri)
-  
-        self._keysForIdentity[identityUri] = []
-        
-    def revokeIdentity(self, identityName):    
+        if self.doesIdentityExist(identityName):
+            raise SecurityException("The identity {} already exists".format(
+                identityUri))
+
+        cursor = self._database.cursor() 
+        cursor.execute("INSERT INTO Identity(identity_name) VALUES(?)",
+            (identityUri,))
+        self._database.commit()
+        cursor.close()
+
+    def revokeIdentity(self):    
         """
-        Revoke the identity. This will purge the associated keys and certificates from the stores.
+        Revoke the identity.
         
-        :param identityName: The identity to revoke. If it is the default, there will be no replacement.
-        :type identityName: Name
         :return: True if the identity was revoked, False if not.
         :rtype: bool
         """
-        identityUri = identityName.toUri()
-        if identityUri in self._keysForIdentity:
-            associatedKeys = self._keysForIdentity.pop(identityUri)
-            for keyUri in associatedKeys:
-                self.revokeKey(Name(keyUri))
-            self._keysForIdentity.pop(identityUri)
-            return True
-        return False
+        raise RuntimeError("revokeIdentity is not implemented")
 
-    def doesKeyExist(self, keyName):    
-        """
-        Check if the specified key already exists.
-        
-        :param Name keyName: The name of the key.
-        :return: True if the key exists, otherwise False.
-        :rtype: bool
-        """
-        return keyName.toUri() in self._keyStore
-
-    def addKey(self, keyName, keyType, publicKeyDer, asDefault=False):    
+    def addKey(self, keyName, keyType, publicKeyDer):    
         """
         Add a public key to the identity storage.
         
@@ -110,24 +63,24 @@ class IotIdentityStorage(IdentityStorage):
         :param keyType: Type of the public key to be added.
         :type keyType: int from KeyType
         :param Blob publicKeyDer: A blob of the public key DER to be added.
-        :param boolean asDefault: If set, this key becomes the default for the identity
         """
-        identityName = keyName.getPrefix(-1)
-        identityUri = identityName.toUri()
-        if not self.doesIdentityExist(identityName):
-            self.addIdentity(identityName)
-
         if self.doesKeyExist(keyName):
             raise SecurityException("A key with the same name already exists!")
-  
-        keyUri = keyName.toUri()
-        self._keyStore[keyUri] = (keyType, Blob(publicKeyDer))
-        # add the key to the list for the identity
-        if asDefault:
-            self._keysforIdentity[identityUri].insert(0, keyUri)
-        else:
-            self._keysForIdentity[identityUri].append(keyUri)
-        self._certificatesForKey[keyUri] = []
+
+        identityUri = keyName.getPrefix(-1).toUri()
+        makeDefault = 0
+        if not self.doesIdentityExist(identityName):
+            self.addIdentity(identityName)
+            makeDefault = 1
+
+        keyId = keyName.get(-1).toEscapedString()
+        keyBuffer = buffer(bytearray (publicKeyDer.buf()))
+
+        cursor = self._database.cursor()
+        cursor.execute("INSERT INTO Key VALUES(?,?,?,?,?, ?)", 
+            (identityUri, keyId, keyType, keyBuffer, makeDefault, 1))
+        self._database.commit()
+        cursor.close()
 
     def getKey(self, keyName):    
         """
@@ -137,125 +90,72 @@ class IotIdentityStorage(IdentityStorage):
         :return: The DER Blob. If not found, return a isNull() Blob.
         :rtype: Blob
         """
-        keyNameUri = keyName.toUri()
-        if not (keyNameUri in self._keyStore):
-            # Not found.  Silently return a null Blob.
-            return Blob()
-        
-        (_, publicKeyDer) = self._keyStore[keyNameUri]
-        return publicKeyDer
+        identityUri = keyName.getPrefix(-1).toUri()
+        keyId = keyName.get(-1).toEscapedString()
 
-    def getKeyType(self, keyName):    
-        """
-        Get the KeyType of the public key with the given keyName.
-        
-        :param Name keyName: The name of the requested public key.
-        :return: The KeyType, for example KeyType.RSA.
-        :rtype: an int from KeyType
-        """
-        keyNameUri = keyName.toUri()
-        if not (keyNameUri in self._keyStore):
-            raise SecurityException(
-              "Cannot get public key type because the keyName doesn't exist")
-        
-        (keyType, _) = self._keyStore[keyNameUri]
-        return keyType
+        cursor = self._database.cursor()
+        cursor.execute("SELECT public_key FROM Key WHERE identity_name=? AND key_identifier=?",
+            (identityUri, keyId))
+        (keyData, ) = cursor.fetchone()
+        return Blob(keyData)
 
-    def revokeKey(self, keyName):
-        keyUri = keyName.toUri()
-        try:
-            certificateList = self._certificatesForKey.pop(keyUri)
-            for certificateUri in certificateList:
-                self.revokeCertificate(Name(certificateUri))
-            self._certificatesForKey.pop(keyUri)
-
-            identityName = keyName.getPrefix(-1)
-            self._keysForIdentity[identityName.toUri()].remove(keyUri)
-            self._keyStore.pop(keyUri)
-        except KeyError:
-            raise SecurityException("Key does not exist")
-        except ValueError:
-            pass # key did not belong to its associated identity
-        
-    def doesCertificateExist(self, certificateName, exactMatch = False):    
+    def activateKey(self, keyName):    
         """
-        Check if the specified certificate already exists.
+        Activate a key. If a key is marked as inactive, its private part will 
+        not be used in packet signing.
         
-        :param Name certificateName: The name of the certificate.
-        :return: True if the certificate exists, otherwise False.
-        :rtype: bool
+        :param Name keyName: The name of the key.
         """
-        if exactMatch:
-            certificateUri = certificateName.toUri()
-            return certificateUri in self._certificateStore
-        else:
-            versionName = self.findCertificateVersionForName(certificateName)
-            return versionName is not None
+        raise RuntimeError("activateKey is not implemented")
 
-    def findCertificateVersionForName(self, certificateName):
+    def deactivateKey(self, keyName):    
         """
-        The certificate name given must be valid (have /KEY/ and /ID-CERT/ components)
-        We return the first full certificate name that matches.
-        """
-        # we match up to the ID-CERT
-        for compIdx in range(certificateName.size()):
-            if certificateName.get(compIdx).toEscapedString() == 'ID-CERT':
-                break
+        Deactivate a key. If a key is marked as inactive, its private part will 
+        not be used in packet signing.
         
-        # if it isn't there, this is a bad certificate name and we return None
-        if certificateName.get(compIdx).toEscapedString() != 'ID-CERT':
-            return None
+        :param Name keyName: The name of the key.
+        """
+        raise RuntimeError("deactivateKey is not implemented")
 
-        certificateName = certificateName.getPrefix(compIdx+1)
-        for uri in self._certificateStore:
-            if certificateName.match(Name(uri)):
-                return uri
-
-        return None
-        
-    def addCertificate(self, certificate, asDefault=False):    
+    def addCertificate(self, certificate):    
         """
         Add a certificate to the identity storage.
         
         :param IdentityCertificate certificate: The certificate to be added. 
           This makes a copy of the certificate.
-        :param boolean asDefault: If set, this certificate becomes the default for the key
         """
+        #TODO: actually check validity of certificate timestamp
         certificateName = certificate.getName()
-        keyName = certificate.getPublicKeyName()
-
-        certificateUri = certificateName.toUri()
-        keyUri = keyName.toUri()
-
-        if not self.doesKeyExist(keyName):
-            keyInfo = certificate.getPublicKeyInfo()
-            self.addKey(keyName, keyInfo.getKeyType(), keyInfo.getKeyDer())
-
-        # Check if the certificate has already exists.
-        # We don't use the doesCertificateExist because this might be a new version
-        if self.doesCertificateExist(certificateName, True):
+        
+        if self.doesCertificateExist(certificateName):
             raise SecurityException("Certificate has already been installed!")
 
-        # Check if the public key of certificate is the same as the key record.
-        keyBlob = self.getKey(keyName)
-        if (keyBlob.isNull() or 
-              # Note: In Python, != should do a byte-by-byte comparison.
-              keyBlob.toBuffer() != 
-              certificate.getPublicKeyInfo().getKeyDer().toBuffer()):
-            raise SecurityException(
-              "Certificate does not match the public key!")
-  
-        # Insert the certificate.
-        # wireEncode returns the cached encoding if available.
-        self._certificateStore[certificateUri] = (
-           certificate.wireEncode())
-
-        # Map the key to the new certificate
-        if asDefault:
-            self._certificatesForKey[keyUri].insert(0, certificateUri)
+        certCopy = IdentityCertificate(certificate)
+        makeDefault = 0
+        keyName = certCopy.getPublicKeyName()
+        keyInfo = certificate.getPublicKeyInfo()
+        if not self.doesKeyExist(keyName):
+            self.addKey(keyName, keyInfo.getKeyType(), keyInfo.getKeyDer())
+            makeDefault = 1
         else:
-            self._certificatesForKey[keyUri].append(certificateUri)
+            # see if the key we already have matches this certificate
+            keyBlob = self.getKey(keyName)
+            if (keyBlob.isNull() or keyBlob.toBuffer() != 
+                    keyInfo.getKeyDer().toBuffer()):
+                raise SecurityException("Certificate does not match public key")
 
+        keyId = keyName.get(-1).toEscapedString()
+        identityUri = keyName.getPrefix(-1).toUri()
+        certIssuer = certCopy.getKeyLocator().getKeyName().toUri()
+        encodedCert = bytearray(certCopy.wireEncode().buf())
+        cursor = self._database.cursor()
+        cursor.execute("INSERT INTO Certificate VALUES(?,?,?,?,?,?,?,?,?,?)",
+            (certificateName.toUri(), certIssuer, identityUri, keyId,
+                certCopy.getNotBefore(), certCopy.getNotAfter(), 
+                encodedCert, 1, makeDefault))
+        self._database.commit()
+        cursor.close()
+            
 
     def getCertificate(self, certificateName, allowAny = False):    
         """
@@ -268,178 +168,124 @@ class IotIdentityStorage(IdentityStorage):
         :return: The requested certificate. If not found, return None.
         :rtype: Data
         """
-        #TODO: check certificate validity
-        certificateFullUri = self.findCertificateVersionForName(certificateName)
-        if certificateFullUri is None:
-            # Not found.  Silently return None.
-            return None
-  
-        data = IdentityCertificate()
-        data.wireDecode(self._certificateStore[certificateFullUri])
-        return data
-
-    def revokeCertificate(self, certificateName):
-        """
-        Must provide the full name of the certificate (timestamp included)
-        """
+        chosenCert = None
         certificateUri = certificateName.toUri()
+        cursor = self._database.cursor()
+
+        if not allowAny:
+            validityClause = " AND valid_flag=1"
+        else
+            validityClause = ""
+
+        # use LIKE because key locators chop off timestamps
+        full_statement = "SELECT certificate_data FROM Certificate WHERE cert_name LIKE ?%"+validityClause+" ORDER BY cert_name DESC"
+        #full_statement = "SELECT certificate_data FROM Certificate WHERE cert_name=?"+validityClause
+
+        cursor.execute(full_statement, (certificateUri, ))
         try:
-            certificate = self._certificateStore.pop(certificateUri)
-        except KeyError:
-            raise SecurityException("Certificate does not exist")
+            (certData, ) = cursor.fetchone()
+        except TypeError:
+            pass
         else:
-            keyName = IdentityCertificate.certificateNameToPublicKeyName(certificateName)
-            self._certificatesForKey[keyName.toUri()].remove(certificateUri)
+            chosenCert = IdentityCertificate()
+            chosenCert.wireDecode(certData)
 
-    #
-    # Get/Set Default
-    #
-
-    def getDefaultIdentity(self):    
-        """
-        Get the default identity.
+        return chosenCert 
         
-        :return: The name of default identity.
-        :rtype: Name
-        :raises SecurityException: if the default identity is not set.
-        """
-        if len(self._defaultIdentity) == 0:
-            raise SecurityException("The default identity is not defined")
-          
-        return Name(self._defaultIdentity)
-
-    def getDefaultKeyNameForIdentity(self, identityName):    
-        """
-        Get the default key name for the specified identity.
-        
-        :param Name identityName: The identity name.
-        :return: The default key name.
-        :rtype: Name
-        :raises SecurityException: if the default key name for the identity is 
-          not set.
-        """
-        if identityName is None:
-            identityUri = self._defaultIdentity
-        else:
-            identityUri = identityName.toUri()
-
-        if identityUri in self._keysForIdentity:
-            # should not be any empty lists in here!
-            keyList = self._keysForIdentity[identityUri]
-            if len(keyList) > 0:
-                return Name(keyList[0])
-            else:
-                raise SecurityException("No known keys for this identity.")
-        else:
-            raise SecurityException("Unknown identity")
-
-    def getDefaultCertificateNameForKey(self, keyName):    
-        """
-        Get the default certificate name for the specified key.
-        
-        :param Name keyName: The key name.
-        :return: The default certificate name.
-        :rtype: Name
-        :raises SecurityException: if the default certificate name for the key 
-          name is not set.
-        """
-        keyUri = keyName.toUri()
-        if keyUri in self._certificatesForKey:
-            certList = self._certificatesForKey[keyUri]
-            if len(certList) > 0:
-                return Name(certList[0])
-            else:
-                raise SecurityException("No known certificates for this key")
-        else:
-            raise SecurityException("Unknown key name")
-
-
     def setDefaultIdentity(self, identityName):    
         """
-        Set the default identity. If the identityName does not exist, then clear
-        the default identity so that getDefaultIdentity() raises an exception.
+        Set the default identity. If the identityName does not exist,  
+        raises a SecurityException.
         
         :param Name identityName: The default identity name.
         """
-        identityUri = identityName.toUri()
-        if identityUri in self._keysForIdentity:
-            self._defaultIdentity = identityUri
-        else:
-            # The identity doesn't exist, so clear the default.
-            self._defaultIdentity = ""
-
-    def setDefaultKeyNameForIdentity(self, identityName, keyName):    
-        """
-        Set the default key name for the specified identity. The key must exist in the key store.
+        if not self.doesIdentityExist(identityName):
+            raise SecurityException("Identity does not exist")
         
-        :param Name keyName: The key name.
-        :param Name identityName: (optional) The identity name to check the 
-          keyName. If not set, the identity is inferred from the key name
-        :raises SecurityException: if the key or identity does not exist
-        """
-        keyUri = keyName.toUri()
-        identityUri = identityName.toUri()
-
-        if identityUri in self._keysForIdentity:
-            keyList = self._keysForIdentity[identityUri]
-            if keyUri in keyList:
-                keyIdx = keyList.index(keyUri)
-                if keyIdx > 0:
-                    # the first key is the default - nothing to do if the key is already first
-                    keyList[keyIdx], keyList[0] = keyList[0], keyList[keyIdx]
-            elif keyUri in self._keyStore:
-                keyList.insert(0, keyUri)
-            else:
-                raise SecurityException("Unknown key name")
+        try:
+            cursor = None
+            currentDefault = self.getDefaultIdentity().toUri()
+        except SecurityException:
+            # no default, no need to remove default flag
+            pass
         else:
-            raise SecurityException("Unknown identity name")
+            cursor = self._database.cursor()
+            cursor.execute("UPDATE Identity SET default_identity=0 WHERE identity_name=?", (currentDefault,))
+
+        if cursor is None:
+            cursor = self._database.cursor()
+
+        # now set this identity as default
+        cursor.execute("UPDATE Identity SET default_identity=1 WHERE identity_name=?", (identityName.toUri()))
+
+        self._database.commit()
+        cursor.close()
+            
+    def setDefaultKeyNameForIdentity(self, keyName, identityNameCheck = None):    
+        """
+        Set the default key name for the corresponding identity.
+        :param Name keyName: The key name.
+        :param Name identityNameCheck: Not used
+        """
+
+        if not self.doesKeyExist(keyName):
+            raise SecurityException("Key does not exist")
+        
+        keyId = keyName.get(-1).toEscapedString()
+        identityUri = keyName.getPrefix(-1).toUri()
+        try:
+            cursor = None
+            currentDefault = self.getDefaultKeyNameForIdentity(identityName)
+        except SecurityException:
+            # no current default, it's okay
+            pass
+        else:
+            cursor = self._database.cursor()
+            currentKeyId = currentDefault.get(-1).toEscapedString()
+            cursor.execute("UPDATE Key SET default_key=0 WHERE identity_name=? AND key_identifier=?",
+                (identityUri, currentKeyId))
+
+        if cursor is None:
+            cursor = self._database.cursor()
+        
+        cursor.execute("UPDATE Key SET default_key=1 WHERE identity_name=? AND key_identifier=?", (identityUri, keyId))
+
+        self._database.commit()
+        cursor.close()
 
     def setDefaultCertificateNameForKey(self, keyName, certificateName):        
         """
-        Set the default certificate name for the specified key. The certificate must exist in the certificate store.
+        Set the default certificate name for the corresponding key
                 
-        :param Name keyName: The key name.
+        :param Name keyName: not used
         :param Name certificateName: The certificate name.
-        :raises SecurityException: if the certificate or key does not exist
         """
-        keyUri = keyName.toUri()
-        certUri = certificateName.toUri()
+        
+        if not self.doesCertificateExist(certificateName):
+            raise SecurityException("Certificate does not exist")
 
-        if keyUri in self._certificatesForKey:
-            certList = self._certificatesForKey[keyUri]
-            if certUri in certList:
-                certIdx = certList.index(certUri)
-                if certIdx > 0:
-                    # the first key is the default - nothing to do if the key is already first
-                    certList[certIdx], certList[0] = certList[0], certList[certIdx]
-            elif certUri in self._certificateStore:
-                certList.insert(0, certUri)
-            else:
-                raise SecurityException("Unnkown certificate name")
+        keyName = IdentityCertificate.certificateNameToPublicKeyName(certificateName)
+        identityUri = keyName.getPrefix(-1).toUri()
+        keyId = keyName.get(-1).toEscapedString()
+
+        try:
+            cursor = None
+            currentDefault = self.getDefaultCertificateNameForKey(keyName)
+        except SecurityException:
+            pass
         else:
-            raise SecurityException("Unknown key name")
-    # --New methods--
+            cursor = self._database.cursor()
+            cursor.execute("UPDATE Certificate SET default_cert=0 WHERE cert_name=? AND identity_name=? AND key_identifier=?",
+                (currentDefault.toUri(), identityUri, keyId))
 
-    @staticmethod
-    def loadIdentityCertificateFromFile(certFilename):
-        """
-        Load certificate data from a file. This is expected to be a base64-encoded
-        IdentityCertificate class, encoded with its wireEncode() method.
-        :param str certFilename: The path to the certificate data file
-        """
-        with open(certFilename, 'r') as certStream:
-            encodedCertLines = certStream.readlines()
-            encodedCert = ''.join(encodedCertLines)
-            certData = bytearray(base64.b64decode(encodedCert))
-            cert = IdentityCertificate()
-            cert.wireDecode(certData)
-            return cert
+        if cursor is None:
+            cursor = self._database.cursor()
+        
+        cursor.execute("UPDATE Certificate SET default_cert=1 WHERE cert_name=? AND identity_name=? AND key_identifier=?",
+                (certificateName.toUri(), identityUri, keyId))
 
-    def getIdentitiesMatching(self, matchPrefix):
-        matches = []
-        for identityUri in self._keysForIdentity:
-            if matchPrefix.match(Name(identityUri)):
-                matches.append(identityUri)
+        self._database.commit()
+        cursor.close()
 
-        return matches
-
+if __name__ == '__main__':
+    i = IotIdentityStorage()
