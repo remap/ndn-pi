@@ -309,14 +309,14 @@ class IotNode(object):
 # Interest handling
 # Verification of and responses to incoming (command) interests
 ##
-    def verificationFailed(dataOrInterest):
+    def verificationFailed(self, dataOrInterest):
         """
         Called when verification of a data packet or command interest fails.
         :param pyndn.Data or pyndn.Interest: The packet that could not be verified
         """
         self.log.info("Received invalid" + dataOrInterest.getName().toUri())
 
-    def _makeVerifiedCommandDispatch(function, transport):
+    def _makeVerifiedCommandDispatch(self, function, transport):
         def onVerified(interest):
             self.log.info("Verified: " + interest.getName().toUri())
             responseData = function(interest)
