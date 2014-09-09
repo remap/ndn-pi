@@ -34,9 +34,16 @@ from iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
 from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
+from commands.configuration_pb2 import DeviceConfigurationMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
+
+from hmac_helper import HmacHelper
+
+default_prefix = Name('/localhop/configure')
+
+#TODO: get key to use from config?
 
 try:
     import asyncio
@@ -62,11 +69,16 @@ class IotNode(object):
         self._identityManager = IdentityManager(self._identityStorage)
         self._policyManager = IotPolicyManager(self._identityStorage, configFilename)
 
-        deviceSuffix = self.config["device/deviceName"][0].value
-        self.prefix = Name(self._policyManager.getEnvironmentPrefix()).append(Name(deviceSuffix))
+        self.deviceSuffix = self.config["device/deviceName"][0].value
+        self.prefix = Name(default_prefix).append(deviceSuffix)
         
-        self._keyChain = KeyChain(self._identityManager, self._policyManager)
-        self._identityStorage.setDefaultIdentity(self.prefix)
+        deviceSerial = self.getSerial()
+        self._hmacHandler = HmacHelper(deviceSerial)
+        
+        #self._keyChain = KeyChain(self._identityManager, self._policyManager)
+        
+        # how do we set our default identity?!
+        self._tempKeyChain = KeyChain()
 
         self._registrationFailures = 0
         self._certificateTimeouts = 0
@@ -74,10 +86,10 @@ class IotNode(object):
 
         self._setupComplete = False
 
+
 ##
 # Logging
 ##
-
     def _prepareLogging(self):
         self.log = logging.getLogger(str(self.__class__))
         self.log.setLevel(logging.DEBUG)
@@ -113,7 +125,8 @@ class IotNode(object):
         self._loop = asyncio.get_event_loop()
         self._face = ThreadsafeFace(self._loop, '')
         self._face.setCommandSigningInfo(self._keyChain, self._keyChain.getDefaultCertificateName())
-        self._face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
+        self.tempPrefixId = self._face.registerPrefix(self.prefix, 
+            self._onConfigurationReceived, self.onRegisterFailed)
         self._keyChain.setFace(self._face)
 
         self._loop.call_soon(self.onStartup)
@@ -125,8 +138,7 @@ class IotNode(object):
         except Exception as e:
             self.log.exception(exc_info=True)
         finally:
-            pass
-            #self.stop()
+            self._isStopped = True
 
     def onRegisterFailed(self, prefix):
         """
@@ -164,6 +176,110 @@ class IotNode(object):
         control logic, etc
         """
         pass
+#####
+# Pre-configuration flow
+####
+
+    def _onConfigurationRequestReceived(self, prefix, interest, transport, prefixId):
+        # the interest we get here is signed by HMAC, let's verify it
+        dataName = Name(interest.getName())
+        replyData = Data(dataName)
+        if (self._hmacHandler.verifyInterest(interest)):
+            # we have a match! decode the controller's name
+            configComponent = interest.getName().get(prefix.size())
+            replyData.setContent('200')
+        else:
+            configComponent = None
+            replyData.setContent('500')
+        transport.send(replyData.wireEncode().buf())
+
+        if configComponent is not None:
+            environmentConfig = DeviceConfigurationMessage()
+            ProtobufTlv.decode(environmentConfig, configComponent.getValue()) 
+            networkPrefix = Name('/'.join(environmentConfig.configuration.networkPrefix.components)
+            controllerName = Name('/'.join(environmentConfig.configuration.controllerName.components)
+            controllerName = Name(networkPrefix).append(controllerName)
+            self._policyManager.setEnvironmentPrefix(networkPrefix)
+            self._policyManager.setTrustRootIdentity(controllerName)
+
+            configureIdentity = Name(networkPrefix).append(self.deviceSuffix) 
+            self._sendCertificateRequest(configureIdentity)
+            
+
+    def _onConfigurationRegistrationFailure(self, prefix):
+        #this is so bad... try a few times
+        pass
+
+###
+# Certificate signing requests
+# On startup, if we don't have a certificate signed by the controller, we request one.
+###
+       
+    def _sendCertificateRequest(self, keyIdentity):
+        """
+        We compose a command interest with our public key info so the controller
+        can sign us a certificate that can be used with other nodes in the network.
+        """
+
+        defaultIdentity = self._tempKeyChain.getDefaultIdentity()
+        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(self.prefix)
+        self.log.debug("Found key: " + defaultKey.toUri())
+
+        message = CertificateRequestMessage()
+        message.command.keyType = self._identityStorage.getKeyType(defaultKey)
+        message.command.keyBits = self._identityStorage.getKey(defaultKey).toRawStr()
+
+        for component in range(defaultKey.size()):
+            message.command.keyName.components.append(defaultKey.get(component).toEscapedString())
+
+        paramComponent = ProtobufTlv.encode(message)
+
+        interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
+        interest = Interest(interestName)
+        interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
+        self._hmacHandler.signInterest(interest)
+
+        self.log.info("Sending certificate request to controller")
+        self.log.debug("Certificate request: "+interest.getName().toUri())
+        self._face.expressInterest(interest, self._onCertificateReceived, self._onCertificateTimeout)
+   
+
+    def _onCertificateTimeout(self, interest):
+        #give up?
+        self.log.warn("Timed out trying to get certificate")
+        if self._certificateTimeouts > 5:
+            self.log.critical("Trust root cannot be reached, exiting")
+            self._isStopped = True
+        else:
+            self._certificateTimeouts += 1
+            self._loop.call_soon(self._sendCertificateRequest)
+        pass
+
+
+    def _processValidCertificate(self, data):
+        # if we were successful, the content of this data is a signed cert
+        try:
+            newCert = IdentityCertificate()
+            newCert.wireDecode(data.getContent())
+            self.log.info("Received certificate from controller")
+            self.log.debug(str(newCert))
+            try:
+                self._identityManager.addCertificate(newCert)
+            except SecurityException:
+                pass # can't tell existing certificat from another error
+            self._identityManager.setDefaultCertificateForKey(newCert)
+        except Exception as e:
+            self.log.exception("Could not import new certificate", exc_info=True)
+
+    def _certificateValidationFailed(self, data):
+        self.log.error("Certificate from controller is invalid!")
+
+    def _onCertificateReceived(self, interest, data):
+
+        self._keyChain.verifyData(data, self._processValidCertificate, self._certificateValidationFailed)
+        self._loop.call_later(5, self._updateCapabilities)
+
+
 
 ###
 # Device capabilities
@@ -215,74 +331,6 @@ class IotNode(object):
         self.log.info("Sending capabilities to controller")
         self._face.expressInterest(interest, self._onCapabilitiesAck, self._onCapabilitiesTimeout)
      
-###
-# Certificate signing requests
-# On startup, if we don't have a certificate signed by the controller, we request one.
-###
-       
-    def _sendCertificateRequest(self):
-        """
-        We compose a command interest with our public key info so the controller
-        can sign us a certificate that can be used with other nodes in the network.
-        """
-
-        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(self.prefix)
-        self.log.debug("Found key: " + defaultKey.toUri())
-
-        message = CertificateRequestMessage()
-        message.command.keyType = self._identityStorage.getKeyType(defaultKey)
-        message.command.keyBits = self._identityStorage.getKey(defaultKey).toRawStr()
-
-        for component in range(defaultKey.size()):
-            message.command.keyName.components.append(defaultKey.get(component).toEscapedString())
-
-        paramComponent = ProtobufTlv.encode(message)
-
-        interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
-        interest = Interest(interestName)
-        interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
-        self._face.makeCommandInterest(interest)
-
-        self.log.info("Sending certificate request to controller")
-        self.log.debug("Certificate request: "+interest.getName().toUri())
-        self._face.expressInterest(interest, self._onCertificateReceived, self._onCertificateTimeout)
-   
-
-    def _onCertificateTimeout(self, interest):
-        #give up?
-        self.log.warn("Timed out trying to get certificate")
-        if self._certificateTimeouts > 5:
-            self.log.critical("Trust root cannot be reached, exiting")
-            self._isStopped = True
-        else:
-            self._certificateTimeouts += 1
-            self._loop.call_soon(self._sendCertificateRequest)
-        pass
-
-
-    def _processValidCertificate(self, data):
-        # if we were successful, the content of this data is a signed cert
-        try:
-            newCert = IdentityCertificate()
-            newCert.wireDecode(data.getContent())
-            self.log.info("Received certificate from controller")
-            self.log.debug(str(newCert))
-            try:
-                self._identityManager.addCertificate(newCert)
-            except SecurityException:
-                pass # can't tell existing certificat from another error
-            self._identityManager.setDefaultCertificateForKey(newCert)
-        except Exception as e:
-            self.log.exception("Could not import new certificate", exc_info=True)
-
-    def _certificateValidationFailed(self, data):
-        self.log.error("Certificate from controller is invalid!")
-
-    def _onCertificateReceived(self, interest, data):
-
-        self._keyChain.verifyData(data, self._processValidCertificate, self._certificateValidationFailed)
-        self._loop.call_later(5, self._updateCapabilities)
-
 ###
 # Data handling
 ###

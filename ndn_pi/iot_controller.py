@@ -38,6 +38,7 @@ class IotController(IotNode):
             new certificate
         - updateCapabilities: should be sent periodically from IotNodes to update their
            command lists
+        - addDevice: add a device based on HMAC
     It is unlikely that you will need to subclass this node type.
     """
     def __init__(self, configFilename):

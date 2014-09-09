@@ -1,0 +1,3 @@
+Enforce localhost security with some default key '/localhost/operator' created in ndn-config
+
+Extend BasicIdentityStorage instead of MemoryIdentityStorage

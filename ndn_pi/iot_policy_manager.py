@@ -58,10 +58,8 @@ class IotPolicyManager(ConfigPolicyManager):
             pass # default directory is missing
             
 
-        environmentPrefix = self.config["device/environmentPrefix"][0].value
-        fullRootName = Name(environmentPrefix).append(self.config["device/controllerName"][0].value)
-        self.setEnvironmentPrefix(environmentPrefix)
-        self.setTrustRootIdentity(fullRootName)
+        self.setEnvironmentPrefix(None)
+        self.setTrustRootIdentity(None)
 
     def inferSigningIdentity(self, fromName):
         """
