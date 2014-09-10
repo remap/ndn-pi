@@ -1,0 +1,10 @@
+message DeviceConfigurationMessage {
+	message Name {
+		repeated bytes components = 8;
+	}
+    message DeviceConfiguration {
+        required Name networkPrefix = 226;
+        required Name controllerName = 227;
+    }
+	required DeviceConfiguration configuration = 228;
+}
