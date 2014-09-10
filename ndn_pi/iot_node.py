@@ -34,7 +34,7 @@ from iot_policy_manager import IotPolicyManager
 
 from commands.cert_request_pb2 import CertificateRequestMessage
 from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
-from commands.configuration_pb2 import DeviceConfigurationMessage
+from commands.configure_device_pb2 import DeviceConfigurationMessage
 
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
@@ -70,22 +70,19 @@ class IotNode(object):
         self._policyManager = IotPolicyManager(self._identityStorage, configFilename)
 
         self.deviceSuffix = self.config["device/deviceName"][0].value
-        self.prefix = Name(default_prefix).append(deviceSuffix)
+        self.prefix = Name(default_prefix).append(self.deviceSuffix)
         
         deviceSerial = self.getSerial()
         self._hmacHandler = HmacHelper(deviceSerial)
-        
-        #self._keyChain = KeyChain(self._identityManager, self._policyManager)
-        
-        # how do we set our default identity?!
-        self._tempKeyChain = KeyChain()
+        self._salt = None 
+        # hopefully there is some private/public key pair available
+        self._keyChain = KeyChain(self._identityManager, self._policyManager)
 
         self._registrationFailures = 0
         self._certificateTimeouts = 0
         self._prepareLogging()
 
         self._setupComplete = False
-
 
 ##
 # Logging
@@ -120,7 +117,7 @@ class IotNode(object):
 
     def start(self):
         """
-        Starts up the node by registering with the controller and obtaining any necessary certificates
+        Starts up the node by registering a localhop name and waiting for the controller to contact it
         """
         self._loop = asyncio.get_event_loop()
         self._face = ThreadsafeFace(self._loop, '')
@@ -129,10 +126,9 @@ class IotNode(object):
             self._onConfigurationReceived, self.onRegisterFailed)
         self._keyChain.setFace(self._face)
 
-        self._loop.call_soon(self.onStartup)
-
         self._isStopped = False
         self._face.stopWhen(lambda:self._isStopped)
+        print("My serial is {}".format(self.getSerial()))
         try:
             self._loop.run_forever()
         except Exception as e:
@@ -162,12 +158,6 @@ class IotNode(object):
         self._isStopped = True 
         
 
-    def onStartup(self):
-        if not self._policyManager.hasRootSignedCertificate():
-            self._loop.call_soon(self._sendCertificateRequest)
-        else:
-            self._loop.call_soon(self._updateCapabilities)
-
     def setupComplete(self):
         """
         Entry point for user-defined behavior. After this is called, the 
@@ -180,7 +170,7 @@ class IotNode(object):
 # Pre-configuration flow
 ####
 
-    def _onConfigurationRequestReceived(self, prefix, interest, transport, prefixId):
+    def _onConfigurationReceived(self, prefix, interest, transport, prefixId):
         # the interest we get here is signed by HMAC, let's verify it
         dataName = Name(interest.getName())
         replyData = Data(dataName)
@@ -196,8 +186,8 @@ class IotNode(object):
         if configComponent is not None:
             environmentConfig = DeviceConfigurationMessage()
             ProtobufTlv.decode(environmentConfig, configComponent.getValue()) 
-            networkPrefix = Name('/'.join(environmentConfig.configuration.networkPrefix.components)
-            controllerName = Name('/'.join(environmentConfig.configuration.controllerName.components)
+            networkPrefix = Name('/'.join(environmentConfig.configuration.networkPrefix.components))
+            controllerName = Name('/'.join(environmentConfig.configuration.controllerName.components))
             controllerName = Name(networkPrefix).append(controllerName)
             self._policyManager.setEnvironmentPrefix(networkPrefix)
             self._policyManager.setTrustRootIdentity(controllerName)
@@ -208,7 +198,14 @@ class IotNode(object):
 
     def _onConfigurationRegistrationFailure(self, prefix):
         #this is so bad... try a few times
-        pass
+        if self._registrationFailures < 5:
+            self._registrationFailures += 1
+            self.log.warn("Could not register {}, retry: {}/{}".format(prefix.toUri(), self._registrationFailures, 5)) 
+            self._face.registerPrefix(self.prefix, self._onConfigurationReceived, 
+                self._onConfigurationRegistrationFailure)
+        else:
+            self.log.critical("Could not register device prefix, ABORTING")
+            self._isStopped = True
 
 ###
 # Certificate signing requests
@@ -221,16 +218,19 @@ class IotNode(object):
         can sign us a certificate that can be used with other nodes in the network.
         """
 
-        defaultIdentity = self._tempKeyChain.getDefaultIdentity()
-        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(self.prefix)
-        self.log.debug("Found key: " + defaultKey.toUri())
+        #TODO: GENERATE A NEW KEY
+        defaultIdentity = self._keyChain.getDefaultIdentity()
+        defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(defaultIdentity)
+
+        newKeyName = self._identityStorage.getNewKeyName(keyIdentity, True)
+        self.log.debug("Found key: " + defaultKey.toUri()+ " renaming as: " + newKeyName.toUri())
 
         message = CertificateRequestMessage()
         message.command.keyType = self._identityStorage.getKeyType(defaultKey)
         message.command.keyBits = self._identityStorage.getKey(defaultKey).toRawStr()
 
         for component in range(defaultKey.size()):
-            message.command.keyName.components.append(defaultKey.get(component).toEscapedString())
+            message.command.keyName.components.append(newKeyName.get(component).toEscapedString())
 
         paramComponent = ProtobufTlv.encode(message)
 

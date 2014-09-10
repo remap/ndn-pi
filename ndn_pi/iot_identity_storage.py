@@ -174,7 +174,7 @@ class IotIdentityStorage(BasicIdentityStorage):
 
         if not allowAny:
             validityClause = " AND valid_flag=1"
-        else
+        else:
             validityClause = ""
 
         # use LIKE because key locators chop off timestamps

@@ -50,7 +50,6 @@ class IotController(IotNode):
         #add the built-ins
         self._insertIntoCapabilities('listDevices', 'directory', False)
         self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
-        self._insertIntoCapabilities('certificateRequest', 'certificate', False)
 
     def _insertIntoCapabilities(self, commandName, keyword, isSigned):
         """

@@ -154,20 +154,6 @@ class ConfigManager(Dialog):
         
         self.alert("Please wait, updating certificates...", showButtons=False)
 
-        nullFile = open(os.devnull, 'wb')
-
-        # certificate is in stdout of ndnsec commands
-        # save to disk and install if necessary (just generated)
-        userCertDirectory = os.path.expanduser("~/.ndn/iot_certs")
-        fileName = "default{}.cert".format(deviceName.replace('/', '_'))
-        certName = os.path.join(userCertDirectory, fileName)
-        try:
-            os.makedirs(userCertDirectory)
-            # may fail because it exists or can't be made, can't tell
-        except:
-            pass
-
-        
         if not force:
             proc = Popen(["ndnsec", "cert-dump", "-i", deviceName], stdout=PIPE, 
                     stderr=nullFile)
@@ -177,25 +163,14 @@ class ConfigManager(Dialog):
 
             # TODO: why does this make the identity default, but not if typed
             # directly into the command line?!
-            proc = Popen(["ndnsec" ,"key-gen", "-n", deviceName], stdout=PIPE, 
+            gen_proc = Popen(["ndnsec" ,"key-gen", "-n", deviceName], stdout=PIPE, 
                     stderr=nullFile)
-            certData, err = proc.communicate()
-            if proc.returncode == 1:
+            install_proc = Popen(["ndnsec", "cert-install", "-"], stdin=gen_proc.stdout)
+            gen_proc.communicate()
+            install_proc.communicate()
+            if gen_proc.returncode == 1 or install_proc.returncode == 1:
                 self.alert("ERROR!\nCannot create certificates!")
 
-        # save to file and install - installing the same cert twice is okay
-        try:
-            certFile = open(certName, 'w')
-            certFile.write(certData)
-            certFile.close()
-            returncode = system_call(["ndnsec-cert-install", certName], 
-                    stdout=nullFile, stderr=nullFile)
-            if returncode != 0:
-                self.alert("ERROR!\nCannot install certificates!")
-        except IOError:
-            self.alert("ERROR!\nCannot save certificates!")
-
-        nullFile.close()
 
     ###
     # File management
