@@ -172,8 +172,15 @@ class IotController(IotNode):
         """
         Does not handle commands set in ndn-config, only the built in commands.
         """
-        # handle the built-in commands, else reject
         interestName = interest.getName()
+
+        #if it is a certificate name, serve the certificate
+        foundCert = self._identityStorage.getCertificate(interestName)
+        if foundCert is not None:
+            self.log.debug("Serving certificate request")
+            transport.send(foundCert.wireEncode().buf())
+            return
+
         afterPrefix = interestName.get(prefix.size()).toEscapedString()
         if afterPrefix == "listDevices":
             #compose device list
@@ -220,6 +227,6 @@ if __name__ == '__main__':
     except IndexError:
         fileName = '/usr/local/etc/ndn/iot/controller.conf'
       
-        
+    
     n = IotController(fileName)
     n.start()
