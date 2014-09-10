@@ -5,4 +5,5 @@ Expose insertIntoCapabilities, expand to include a function to call
 Update ndn-config; need separate utility for configuring controller and
 general nodes
 
-Allow IotPolicyManager to add, remove rules when trust root is established 
+Add a hook for the controller to add devices (maybe a console-like interface?)
+

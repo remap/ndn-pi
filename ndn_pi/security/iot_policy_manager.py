@@ -24,6 +24,7 @@ from pyndn.security.policy import ConfigPolicyManager
 from pyndn import Name
 
 from pyndn.security.security_exception import SecurityException
+from pyndn.util.boost_info_parser import BoostInfoParser
 
 import os
 
@@ -37,8 +38,7 @@ All command interests must be signed with a certificate in this environment
 to be trusted.
 
 There is a root name and public key which must be the top authority in the environment
-for the certificate to be trusted. For now, the root is specified in a config file. When
-no root is specified, nothing can be validated.
+for the certificate to be trusted. 
 """
 
 class IotPolicyManager(ConfigPolicyManager):
@@ -49,9 +49,48 @@ class IotPolicyManager(ConfigPolicyManager):
             name settings.
         """
         super(IotPolicyManager, self).__init__(identityStorage, configFilename)
-
         self.setEnvironmentPrefix(None)
         self.setTrustRootIdentity(None)
+
+    def updateTrustRules(self, deviceIdentity):
+        """
+        Should be called after the device identity, trust root or environment
+        prefix changes.
+
+        Not called automatically in case they are all changing (typical for
+        bootstrapping).
+
+        Resets the validation rules if we don't have a trust root or enivronment
+        """
+        # TODO: use environment variable for this, fall back to default
+        templateFile = '/usr/local/etc/ndn/iot/default.conf'
+        newConfig = BoostInfoParser()
+        newConfig.read(templateFile)
+        validatorTree = newConfig["validator"][0]
+
+        if (self._environmentPrefix is not None and 
+            self._trustRootIdentity is not None):
+            # don't sneak in a bad identity
+            if (self._environmentPrefix is None or 
+                not self._environmentPrefix.match(deviceIdentity)):
+                raise SecurityException("Device identity does not belong to configured network!")
+            
+            environmentUri = self._environmentPrefix.toUri()
+            deviceUri = deviceIdentity.toUri()
+             
+            for rule in validatorTree["rule"]:
+                ruleId = rule["id"][0].value
+                if ruleId == 'Certificate Trust':
+                    #modify the 'Certificate Trust' rule
+                    rule["checker/key-locator/name"][0].value = environmentUri
+                elif ruleId == 'Command Interests':
+                    rule["filter/name"][0].value = deviceUri
+                    rule["checker/key-locator/name"][0].value = environmentUri
+            
+        #remove old validation rules from config
+        # replace with new validator rules
+        self.config._root.subtrees["validator"] = [validatorTree]
+        
 
     def inferSigningIdentity(self, fromName):
         """

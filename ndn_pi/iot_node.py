@@ -64,11 +64,10 @@ class IotNode(BaseNode):
         self.prefix = Name(default_prefix).append(self.deviceSuffix)
         
         deviceSerial = self.getSerial()
-        self._salt = None 
 
         # TODO: generate a salt and then make the hmac handler
+        self._salt = None 
         self._hmacHandler = HmacHelper(deviceSerial)
-        print self._hmacHandler.key.encode('hex')
 
         self._certificateTimeouts = 0
 
@@ -89,6 +88,7 @@ class IotNode(BaseNode):
         control logic, etc
         """
         pass
+
 #####
 # Pre-configuration flow
 ####
@@ -176,7 +176,7 @@ class IotNode(BaseNode):
 
         interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
         interest = Interest(interestName)
-        interest.setInterestLifetimeMilliseconds(100000) # takes a tick to verify and sign
+        interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
         self._hmacHandler.signInterest(interest)
 
         self.log.info("Sending certificate request to controller")
@@ -209,6 +209,8 @@ class IotNode(BaseNode):
             # we may need a static method on KeyChain to allow verifying before adding
     
             rootCertName = newCert.getSignature().getKeyLocator().getKeyName()
+            # update trust rules so we trust the controller
+            self._policyManager.updateTrustRules(self._configureIdentity)
 
             def onRootCertificateDownload(interest, data):
                 try:
@@ -238,6 +240,7 @@ class IotNode(BaseNode):
         # unregister localhop prefix, register new prefix, change identity
         self.prefix = self._configureIdentity
         self._identityStorage.setDefaultIdentity(self.prefix)
+        
 
         self._face.removeRegisteredPrefix(self.tempPrefixId)
         self._face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
@@ -246,6 +249,10 @@ class IotNode(BaseNode):
 
     def _certificateValidationFailed(self, data):
         self.log.error("Certificate from controller is invalid!")
+        # remove trust info
+        self._policyManager.setTrustRootIdentity(None)
+        self._policyManager.setEnvironmentPrefix(None)
+        self._policyManager.updateTrustRules(None)
 
     def _onCertificateReceived(self, interest, data):
         # if we were successful, the content of this data is an HMAC

@@ -20,7 +20,7 @@
 
 
 from whiptail_mod import Dialog
-from boost_info_parser import BoostInfoParser, BoostInfoTree
+from pyndn.util.boost_info_parser import BoostInfoParser, BoostInfoTree
 import sys
 import itertools
 import re
