@@ -67,7 +67,8 @@ class IotIdentityStorage(BasicIdentityStorage):
         if self.doesKeyExist(keyName):
             raise SecurityException("A key with the same name already exists!")
 
-        identityUri = keyName.getPrefix(-1).toUri()
+        identityName = keyName.getPrefix(-1)
+        identityUri = identityName.toUri()
         makeDefault = 0
         if not self.doesIdentityExist(identityName):
             self.addIdentity(identityName)
@@ -97,7 +98,7 @@ class IotIdentityStorage(BasicIdentityStorage):
         cursor.execute("SELECT public_key FROM Key WHERE identity_name=? AND key_identifier=?",
             (identityUri, keyId))
         (keyData, ) = cursor.fetchone()
-        return Blob(keyData)
+        return Blob(bytearray(keyData))
 
     def activateKey(self, keyName):    
         """
@@ -116,6 +117,28 @@ class IotIdentityStorage(BasicIdentityStorage):
         :param Name keyName: The name of the key.
         """
         raise RuntimeError("deactivateKey is not implemented")
+
+    def doesCertificateExist(self, certificateName):    
+        """
+        Check if the specified certificate already exists.
+        
+        :param Name certificateName: The name of the certificate.
+        :return: True if the certificate exists, otherwise False.
+        :rtype: bool
+        """
+        cursor = self._database.cursor()        
+        # need to use LIKE because key locators cut off timestamps
+        escapedUri = certificateName.toUri().replace('%', '\\%')
+        cursor.execute(
+          "SELECT count(*) FROM Certificate WHERE cert_name LIKE ? ESCAPE '\\'",
+          (escapedUri+'%',))
+        certExists = False
+        (count,) = cursor.fetchone()
+        if count > 0:
+            certExists = True
+            
+        cursor.close()
+        return certExists
 
     def addCertificate(self, certificate):    
         """
@@ -146,13 +169,14 @@ class IotIdentityStorage(BasicIdentityStorage):
 
         keyId = keyName.get(-1).toEscapedString()
         identityUri = keyName.getPrefix(-1).toUri()
-        certIssuer = certCopy.getKeyLocator().getKeyName().toUri()
-        encodedCert = bytearray(certCopy.wireEncode().buf())
+        certIssuer = certCopy.getSignature().getKeyLocator().getKeyName().toUri()
+        encodedCert = buffer(bytearray(certCopy.wireEncode().buf()))
+        notBefore = certCopy.getNotBefore()
+        notAfter = certCopy.getNotAfter()
         cursor = self._database.cursor()
-        cursor.execute("INSERT INTO Certificate VALUES(?,?,?,?,?,?,?,?,?,?)",
+        cursor.execute("INSERT INTO Certificate VALUES(?,?,?,?,?,?,?,?,?)",
             (certificateName.toUri(), certIssuer, identityUri, keyId,
-                certCopy.getNotBefore(), certCopy.getNotAfter(), 
-                encodedCert, 1, makeDefault))
+                notBefore, notAfter, encodedCert, 1, makeDefault))
         self._database.commit()
         cursor.close()
             
@@ -172,24 +196,25 @@ class IotIdentityStorage(BasicIdentityStorage):
         certificateUri = certificateName.toUri()
         cursor = self._database.cursor()
 
-        if not allowAny:
-            validityClause = " AND valid_flag=1"
-        else:
-            validityClause = ""
+        #if not allowAny:
+        #    validityClause = " AND valid_flag=1"
+        #else:
+        validityClause = ""
 
         # use LIKE because key locators chop off timestamps
-        full_statement = "SELECT certificate_data FROM Certificate WHERE cert_name LIKE ?%"+validityClause+" ORDER BY cert_name DESC"
+        # need to escape any percent signs in the certificate uri for sql's
+        # sake, but still append % for LIKE
+        escapedUri = certificateUri.replace('%', '\\%')
+        full_statement = "SELECT certificate_data FROM Certificate WHERE cert_name LIKE ?"+validityClause+" ESCAPE '\\' ORDER BY cert_name DESC"
         #full_statement = "SELECT certificate_data FROM Certificate WHERE cert_name=?"+validityClause
-
-        cursor.execute(full_statement, (certificateUri, ))
+        cursor.execute(full_statement, (escapedUri+'%', ))
         try:
             (certData, ) = cursor.fetchone()
         except TypeError:
             pass
         else:
             chosenCert = IdentityCertificate()
-            chosenCert.wireDecode(certData)
-
+            chosenCert.wireDecode(bytearray(certData))
         return chosenCert 
         
     def setDefaultIdentity(self, identityName):    
@@ -216,7 +241,7 @@ class IotIdentityStorage(BasicIdentityStorage):
             cursor = self._database.cursor()
 
         # now set this identity as default
-        cursor.execute("UPDATE Identity SET default_identity=1 WHERE identity_name=?", (identityName.toUri()))
+        cursor.execute("UPDATE Identity SET default_identity=1 WHERE identity_name=?", (identityName.toUri(), ))
 
         self._database.commit()
         cursor.close()

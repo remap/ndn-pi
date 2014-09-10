@@ -7,20 +7,18 @@ import struct
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
 from pyndn.security import KeyChain
-from pyndn.security.identity import IdentityManager
-from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 
-from iot_identity_storage import IotIdentityStorage
-from iot_policy_manager import IotPolicyManager
+from base_node import BaseNode
 
 from ndn_pi.commands.cert_request_pb2 import CertificateRequestMessage
 from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
+from commands.configure_device_pb2 import DeviceConfigurationMessage
 
-from pyndn.util.boost_info_parser import BoostInfoParser
-from ndn_pi.iot_node import IotNode
 from pyndn.security.security_exception import SecurityException
+
+from hmac_helper import HmacHelper
 
 from collections import defaultdict
 import json
@@ -30,7 +28,7 @@ try:
 except ImportError:
     import trollius as asyncio
 
-class IotController(IotNode):
+class IotController(BaseNode):
     """
     The controller class has a few built-in commands:
         - listDevices: return the names and capabilities of all attached devices
@@ -39,15 +37,24 @@ class IotController(IotNode):
         - updateCapabilities: should be sent periodically from IotNodes to update their
            command lists
         - addDevice: add a device based on HMAC
-    It is unlikely that you will need to subclass this node type.
+    It is unlikely that you will need to subclass this.
     """
     def __init__(self, configFilename):
         super(IotController, self).__init__(configFilename)
-
+        
+        self.deviceSuffix = Name(self.config["device/controllerName"][0].value)
+        self.networkPrefix = Name(self.config["device/environmentPrefix"][0].value)
+        self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+        self._identityStorage.setDefaultIdentity(self.prefix)
+        
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
 
-        #add the built-ins
+        # keep track of who's still using HMACs
+        # key is device serial, value is the HmacHelper
+        self._hmacDevices = {}
+
+        # add the built-ins
         self._insertIntoCapabilities('listDevices', 'directory', False)
         self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
 
@@ -58,42 +65,119 @@ class IotController(IotNode):
         newUri = Name(self.prefix).append(Name(commandName)).toUri()
         self._directory[keyword].append({'signed':isSigned, 'name':newUri})
 
-    def _createCertificateIfNecessary(self, commandParamsTlv):
+    def _beforeLoopStart(self):
+        self._face.registerPrefix(self.prefix, 
+            self._onCommandReceived, self.onRegisterFailed)
+        self._loop.call_soon(self.onStartup)
+
+
+######
+# Initial configuration
+#######
+    # TODO: deviceSuffix will be replaced by deviceSerial
+    def _addDeviceToNetwork(self, deviceSerial, deviceSuffix, salt=''):
+        saltedKey = deviceSerial+salt
+        h = HmacHelper(saltedKey)
+        self._hmacDevices[deviceSuffix] = h
+
+        d = DeviceConfigurationMessage()
+        for i in range(self.networkPrefix.size()):
+            component = self.networkPrefix.get(i)
+            d.configuration.networkPrefix.components.append(component.toEscapedString())
+         
+        for i in range(self.deviceSuffix.size()):
+            component = self.deviceSuffix.get(i)
+            d.configuration.controllerName.components.append(component.toEscapedString())
+        interestName = Name('/localhop/configure').append(Name(deviceSuffix))
+        encodedParams = ProtobufTlv.encode(d)
+        interestName.append(encodedParams)
+        interest = Interest(interestName)
+        h.signInterest(interest)
+
+        self._face.expressInterest(interest, self._deviceAdditionResponse,
+            self._deviceAdditionTimedOut)
+
+    def _deviceAdditionTimedOut(self, interest):
+        deviceSuffix = str(interest.getName().get(2).getValue())
+        self.log.warn("Timed out trying to configure device " + deviceSuffix)
+        # don't try again
+        self._hmacDevices.pop(deviceSuffix)
+
+    def _deviceAdditionResponse(self, interest, data):
+        status = data.getContent().toRawStr()
+        deviceSuffix = str(interest.getName().get(2).getValue())
+        hmacChecker = self._hmacDevices[deviceSuffix]
+        if (hmacChecker.verifyData(data)): 
+            self.log.info("Received {} from {}".format(status, deviceSuffix))
+        else:
+            self.log.warn("Received invalid HMAC from {}".format(deviceSuffix))
+        
+
+######
+# Certificate signing
+######
+
+    def _handleCertificateRequest(self, interest, transport):
         """
-        Extracts a public key name and key bits from a command interest name component.
-        Look up the certificate corresponding to the key and return its full network 
-        name if it exists. If not, generate one, install it,  and return its name.
+        Extracts a public key name and key bits from a command interest name 
+        component. Generates a certificate if the request is verifiable.
+
+        This expects an HMAC signed interest.
         """
+        commandParamsTlv = interest.getName().get(self.prefix.size()+1)
+
         message = CertificateRequestMessage()
         ProtobufTlv.decode(message, commandParamsTlv.getValue())
 
         keyComponents = message.command.keyName.components
         keyName = Name("/".join(keyComponents))
+        identityName = keyName.getPrefix(-1)
 
         self.log.debug("Key name: " + keyName.toUri())
 
+        suffixStart = self.networkPrefix.size()
+        deviceSuffix = identityName.getSubName(suffixStart).toUri().strip('/')
+
+        response = Data(interest.getName())
+        certData = None
+        hmac = None
         try:
-            certificateName = self._identityStorage.getDefaultCertificateNameForKey(keyName)
-            return self._identityStorage.getCertificate(certificateName)
-        except SecurityException:
-            if not self._policyManager.getEnvironmentPrefix().match(keyName):
-                # we do not issue certs for keys outside of our network
-                return None
+            hmac = self._hmacDevices[deviceSuffix]
+            if hmac.verifyInterest(interest):
+                certData = self._createCertificateFromRequest(message)
+        except KeyError, SecurityException:
+            pass
 
-            keyDer = Blob(message.command.keyBits)
-            keyType = message.command.keyType
-            publicKey = PublicKey(keyType, keyDer)
-            certificate = self._createCertificateForKey(keyName, publicKey)
-            self._identityStorage.addCertificate(certificate)
-            return certificate
+        if certData is not None:
+            response.setContent(certData.wireEncode())
+            response.getMetaInfo().setFreshnessPeriod(10000) # should be good even longer
+        else:
+            response.setContent("Denied")
+        if hmac is not None:
+            hmac.signData(response)
+        self.sendData(response, transport, False)
 
-    def _createCertificateForKey(self, keyName, publicKey):
+    def _createCertificateFromRequest(self, message):
         """
         Generate an IdentityCertificate from the public key information given.
         """
+        # TODO: Verify the certificate was actually signed with the private key
+        # matching the public key we are issuing a cert for!!
+        keyComponents = message.command.keyName.components
+        keyName = Name("/".join(keyComponents))
+
+        if not self._policyManager.getEnvironmentPrefix().match(keyName):
+            # we do not issue certs for keys outside of our network
+            return None
+
+        keyDer = Blob(message.command.keyBits)
+        keyType = message.command.keyType
+        publicKey = PublicKey(keyType, keyDer)
+
         timestamp = (time.time())
 
-        # TODO: put the 'KEY' part after the environment prefix to be responsible for cert delivery
+        # TODO: put the 'KEY' part after the environment prefix 
+        # to be responsible for cert delivery
         certificateName = keyName.getPrefix(-1).append('KEY').append(keyName.get(-1))
         certificateName.append("ID-CERT").append(Name.Component(struct.pack(">l", timestamp)))        
 
@@ -111,8 +195,13 @@ class IotController(IotNode):
         # sign this new certificate
         certificate.encode()
         self._keyChain.sign(certificate, self._keyChain.getDefaultCertificateName())
-
+        # store it for later use + verification
+        self._identityStorage.addCertificate(certificate)
         return certificate
+
+######
+# Device Capabilities
+######
 
     def _updateDeviceCapabilities(self, interest):
         """
@@ -168,6 +257,10 @@ class IotController(IotNode):
 
         return response
 
+#####
+# Interest handling
+####
+
     def _onCommandReceived(self, prefix, interest, transport, prefixId):
         """
         Does not handle commands set in ndn-config, only the built in commands.
@@ -190,16 +283,8 @@ class IotController(IotNode):
         elif afterPrefix == "certificateRequest":
             #build and sign certificate
             self.log.debug("Received certificate request")
-            paramsComponent = interest.getName().get(prefix.size()+1)
-            certData = self._createCertificateIfNecessary(paramsComponent)
+            self._handleCertificateRequest(interest, transport)
 
-            response = Data(interest.getName())
-            if certData is not None:
-                response.setContent(certData.wireEncode())
-                response.getMetaInfo().setFreshnessPeriod(10000) # should be good even longer
-            else:
-                reponse.setContent("Denied")
-            self.sendData(response, transport)
         elif afterPrefix == "updateCapabilities":
             # needs to be signed!
             self.log.debug("Received capabilities update")
@@ -211,7 +296,9 @@ class IotController(IotNode):
             self._keyChain.verifyInterest(interest, 
                     onVerifiedCapabilities, self.verificationFailed)
         else:
-            response = super(IotController, self).unkownCommandResponse()
+            response = Data(interest.getName())
+            response.setContent("500")
+            response.getMetaInfo().setFreshnessPeriod(1000)
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
@@ -219,6 +306,12 @@ class IotController(IotNode):
             #this is an ERROR - we are the root!
             self.log.critical("Controller has no certificate! Try running ndn-config with the configuration file.")
             self.stop()
+        # for testing
+        else:
+            serial = '00000000534733c2'
+            suffix = 'default'
+            self._loop.call_later(5, self._addDeviceToNetwork, serial, suffix)
+            
 
 
 if __name__ == '__main__':
