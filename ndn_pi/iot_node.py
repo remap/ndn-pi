@@ -27,10 +27,7 @@ from pyndn.security.identity import IdentityManager
 from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.encoding import ProtobufTlv
-from pyndn.transport import UdpTransport
 
-from iot_identity_storage import IotIdentityStorage
-from iot_policy_manager import IotPolicyManager
 from base_node import BaseNode
 
 from commands.cert_request_pb2 import CertificateRequestMessage
@@ -40,7 +37,7 @@ from commands.configure_device_pb2 import DeviceConfigurationMessage
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
 
-from hmac_helper import HmacHelper
+from security.hmac_helper import HmacHelper
 
 default_prefix = Name('/localhop/configure')
 

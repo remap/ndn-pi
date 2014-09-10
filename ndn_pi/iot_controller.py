@@ -18,7 +18,7 @@ from commands.configure_device_pb2 import DeviceConfigurationMessage
 
 from pyndn.security.security_exception import SecurityException
 
-from hmac_helper import HmacHelper
+from security.hmac_helper import HmacHelper
 
 from collections import defaultdict
 import json

@@ -26,13 +26,10 @@ from pyndn.security import KeyChain
 from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.identity import IdentityManager
 
-from iot_identity_storage import IotIdentityStorage
-from iot_policy_manager import IotPolicyManager
-
+from security.iot_identity_storage import IotIdentityStorage
+from security.iot_policy_manager import IotPolicyManager
 
 from pyndn.util.boost_info_parser import BoostInfoParser
-
-#TODO: get key to use from config?
 
 try:
     import asyncio
