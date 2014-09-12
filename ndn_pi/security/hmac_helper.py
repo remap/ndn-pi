@@ -48,28 +48,32 @@ class HmacHelper(object):
             pin[i] = random.randint(0,0xff)
         return str(pin).encode('hex')
 
-    def signData(self, data):
-        s = Sha256HmacSignature()
-        data.setSignature(s)
-        encoded = self.wireFormat.encodeData(data)[0]
-        signer = hmac.new(self.key, bytearray(encoded.buf()), sha256)
-        s.getKeyLocator().setType(KeyLocatorType.KEY_LOCATOR_DIGEST)
-        s.getKeyLocator().setKeyData(signer.digest())
-        data.setSignature(s)
-     
-    def verifyData(self, data):
-        # clear out old signature so encoding does not include it
-        savedSig = data.getSignature()
+    def signData(self, data, keyName=None, wireFormat=None):
         data.setSignature(Sha256HmacSignature())
+        s = data.getSignature()
 
-        encoded = self.wireFormat.encodeData(data)[0]
-        hasher = hmac.new(self.key, bytearray(encoded.buf()), sha256)
-        sig = savedSig.getKeyLocator().getKeyData()
-        return sig.toRawStr() == hasher.digest()
+        s.getKeyLocator().setType(KeyLocatorType.KEYNAME)
+        s.getKeyLocator().setKeyName(keyName)
 
-    def signInterest(self, interest):
-        # creates a nonce and timestamp - not exactly the same as a regular signed interest
-        # because it is missing the SignatureInfo component
+        if wireFormat is None:
+            wireFormat = WireFormat.getDefaultWireFormat()
+        encoded = data.wireEncode(wireFormat)
+        signer = hmac.new(self.key, bytearray(encoded.toSignedBuffer()), sha256)
+        s.setSignature(Blob(signer.digest()))
+        data.wireEncode(wireFormat)
+     
+    def verifyData(self, data, wireFormat=None):
+        # clear out old signature so encoding does not include it
+        if wireFormat is None:
+            wireFormat = WireFormat.getDefaultWireFormat()
+        encoded = data.wireEncode(wireFormat)
+        hasher = hmac.new(self.key, bytearray(encoded.toSignedBuffer()), sha256)
+        sigBytes = data.getSignature().getSignature()
+        return sigBytes.toRawStr() == hasher.digest()
+
+    def signInterest(self, interest, keyName=None, wireFormat=None):
+        # Adds the nonce and timestamp here, because there is no
+        # 'makeCommandInterest' call for this yet
         nonceValue = bytearray(8)
         for i in range(8):
             nonceValue[i] = self.random.randint(0,0xff)
@@ -80,30 +84,34 @@ class HmacHelper(object):
             timestampValue[-(i+1)] = byte
             ts = ts >> 8
 
+        if wireFormat is None:
+            wireFormat = WireFormat.getDefaultWireFormat()
+
+        s = Sha256HmacSignature()
+        s.getKeyLocator().setType(KeyLocatorType.KEYNAME)
+        s.getKeyLocator().setKeyName(keyName)
+
         interestName = interest.getName()
         interestName.append(nonceValue).append(timestampValue)
-        interest.setNonce(Blob(nonceValue))
-        encoded = self.wireFormat.encodeInterest(interest)[0]
-        hasher = hmac.new(self.key, bytearray(encoded.buf()), sha256)
-        interestName.append(bytearray(hasher.digest()))
-        interest.setNonce(Blob(nonceValue))
+        interestName.append(wireFormat.encodeSignatureInfo(s))
+        interestName.append(Name.Component())
 
-    def verifyInterest(self, interest):
-        tempInterest = Interest(interest)
-        oldNonce = interest.getNonce()
-        sigComponent = interest.getName().get(-1)
-        signedPortion = interest.getName().getPrefix(-1)
-        tempInterest.setName(signedPortion)
-        tempInterest.setNonce(oldNonce)
-        encoded = self.wireFormat.encodeInterest(tempInterest)[0]
-        hasher = hmac.new(self.key, bytearray(encoded.buf()), sha256)
-        
-        return sigComponent.getValue().toRawStr() == hasher.digest()
+        encoding = interest.wireEncode(wireFormat)
+        signer = hmac.new(self.key, encoding.toSignedBuffer(), sha256)
+
+        s.setSignature(Blob(signer.digest()))
+        interest.setName(interestName.getPrefix(-1).append(
+            wireFormat.encodeSignatureValue(s)))
 
 
-#if __name__ == '__main__':
-#    h = HmacHelper('telly') 
-#    i = Interest(Name('/my/name/is/hans'))
-#    h.signInterest(i)
-#    h.verifyInterest(i)
+    def verifyInterest(self, interest, wireFormat=None):
+        if wireFormat is None:
+            wireFormat = WireFormat.getDefaultWireFormat()
 
+        signature = wireFormat.decodeSignatureInfoAndValue(
+                        interest.getName().get(-2).getValue().buf(),
+                        interest.getName().get(-1).getValue().buf())
+
+        encoding = interest.wireEncode(wireFormat)
+        hasher = hmac.new(self.key, encoding.toSignedBuffer(), sha256)
+        return signature.getSignature().toRawStr() == hasher.digest()
