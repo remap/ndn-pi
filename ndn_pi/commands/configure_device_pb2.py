@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='configure-device.proto',
   package='',
-  serialized_pb='\n\x16\x63onfigure-device.proto\"\x8e\x02\n\x1a\x44\x65viceConfigurationMessage\x12G\n\rconfiguration\x18\xe4\x01 \x02(\x0b\x32/.DeviceConfigurationMessage.DeviceConfiguration\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1a\x8a\x01\n\x13\x44\x65viceConfiguration\x12\x38\n\rnetworkPrefix\x18\xe2\x01 \x02(\x0b\x32 .DeviceConfigurationMessage.Name\x12\x39\n\x0e\x63ontrollerName\x18\xe3\x01 \x02(\x0b\x32 .DeviceConfigurationMessage.Name')
+  serialized_pb='\n\x16\x63onfigure-device.proto\"\xc7\x02\n\x1a\x44\x65viceConfigurationMessage\x12G\n\rconfiguration\x18\xe5\x01 \x02(\x0b\x32/.DeviceConfigurationMessage.DeviceConfiguration\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1a\xc3\x01\n\x13\x44\x65viceConfiguration\x12\x38\n\rnetworkPrefix\x18\xe2\x01 \x02(\x0b\x32 .DeviceConfigurationMessage.Name\x12\x39\n\x0e\x63ontrollerName\x18\xe3\x01 \x02(\x0b\x32 .DeviceConfigurationMessage.Name\x12\x37\n\x0c\x64\x65viceSuffix\x18\xe4\x01 \x02(\x0b\x32 .DeviceConfigurationMessage.Name')
 
 
 
@@ -64,6 +64,13 @@ _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION = descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    descriptor.FieldDescriptor(
+      name='deviceSuffix', full_name='DeviceConfigurationMessage.DeviceConfiguration.deviceSuffix', index=2,
+      number=228, type=11, cpp_type=10, label=2,
+      has_default_value=False, default_value=None,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -74,7 +81,7 @@ _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION = descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=159,
-  serialized_end=297,
+  serialized_end=354,
 )
 
 _DEVICECONFIGURATIONMESSAGE = descriptor.Descriptor(
@@ -86,7 +93,7 @@ _DEVICECONFIGURATIONMESSAGE = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='configuration', full_name='DeviceConfigurationMessage.configuration', index=0,
-      number=228, type=11, cpp_type=10, label=2,
+      number=229, type=11, cpp_type=10, label=2,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -101,12 +108,13 @@ _DEVICECONFIGURATIONMESSAGE = descriptor.Descriptor(
   is_extendable=False,
   extension_ranges=[],
   serialized_start=27,
-  serialized_end=297,
+  serialized_end=354,
 )
 
 _DEVICECONFIGURATIONMESSAGE_NAME.containing_type = _DEVICECONFIGURATIONMESSAGE;
 _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION.fields_by_name['networkPrefix'].message_type = _DEVICECONFIGURATIONMESSAGE_NAME
 _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION.fields_by_name['controllerName'].message_type = _DEVICECONFIGURATIONMESSAGE_NAME
+_DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION.fields_by_name['deviceSuffix'].message_type = _DEVICECONFIGURATIONMESSAGE_NAME
 _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION.containing_type = _DEVICECONFIGURATIONMESSAGE;
 _DEVICECONFIGURATIONMESSAGE.fields_by_name['configuration'].message_type = _DEVICECONFIGURATIONMESSAGE_DEVICECONFIGURATION
 DESCRIPTOR.message_types_by_name['DeviceConfigurationMessage'] = _DEVICECONFIGURATIONMESSAGE

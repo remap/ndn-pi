@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='cert-request.proto',
   package='',
-  serialized_pb='\n\x12\x63\x65rt-request.proto\"\xe5\x01\n\x19\x43\x65rtificateRequestMessage\x12?\n\x07\x63ommand\x18\xdf\x01 \x02(\x0b\x32-.CertificateRequestMessage.CertificateRequest\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1ak\n\x12\x43\x65rtificateRequest\x12\x31\n\x07keyName\x18\xdc\x01 \x02(\x0b\x32\x1f.CertificateRequestMessage.Name\x12\x10\n\x07keyType\x18\xdd\x01 \x02(\r\x12\x10\n\x07keyBits\x18\xde\x01 \x02(\x0c')
+  serialized_pb='\n\x12\x63\x65rt-request.proto\"\x8b\x02\n\x19\x43\x65rtificateRequestMessage\x12?\n\x07\x63ommand\x18\xdf\x01 \x02(\x0b\x32-.CertificateRequestMessage.CertificateRequest\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1a\t\n\x07KeyData\x1a\x08\n\x06Serial\x1a|\n\x12\x43\x65rtificateRequest\x12\x31\n\x07keyName\x18\xdc\x01 \x02(\x0b\x32\x1f.CertificateRequestMessage.Name\x12\x10\n\x07keyType\x18\xdd\x01 \x02(\r\x12\x10\n\x07keyBits\x18\xde\x01 \x02(\x0c\x12\x0f\n\x06serial\x18\xdb\x01 \x02(\x0c')
 
 
 
@@ -43,6 +43,46 @@ _CERTIFICATEREQUESTMESSAGE_NAME = descriptor.Descriptor(
   serialized_end=143,
 )
 
+_CERTIFICATEREQUESTMESSAGE_KEYDATA = descriptor.Descriptor(
+  name='KeyData',
+  full_name='CertificateRequestMessage.KeyData',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  serialized_start=145,
+  serialized_end=154,
+)
+
+_CERTIFICATEREQUESTMESSAGE_SERIAL = descriptor.Descriptor(
+  name='Serial',
+  full_name='CertificateRequestMessage.Serial',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  extension_ranges=[],
+  serialized_start=156,
+  serialized_end=164,
+)
+
 _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST = descriptor.Descriptor(
   name='CertificateRequest',
   full_name='CertificateRequestMessage.CertificateRequest',
@@ -71,6 +111,13 @@ _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST = descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    descriptor.FieldDescriptor(
+      name='serial', full_name='CertificateRequestMessage.CertificateRequest.serial', index=3,
+      number=219, type=12, cpp_type=9, label=2,
+      has_default_value=False, default_value="",
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -80,8 +127,8 @@ _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=145,
-  serialized_end=252,
+  serialized_start=166,
+  serialized_end=290,
 )
 
 _CERTIFICATEREQUESTMESSAGE = descriptor.Descriptor(
@@ -101,17 +148,19 @@ _CERTIFICATEREQUESTMESSAGE = descriptor.Descriptor(
   ],
   extensions=[
   ],
-  nested_types=[_CERTIFICATEREQUESTMESSAGE_NAME, _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST, ],
+  nested_types=[_CERTIFICATEREQUESTMESSAGE_NAME, _CERTIFICATEREQUESTMESSAGE_KEYDATA, _CERTIFICATEREQUESTMESSAGE_SERIAL, _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST, ],
   enum_types=[
   ],
   options=None,
   is_extendable=False,
   extension_ranges=[],
   serialized_start=23,
-  serialized_end=252,
+  serialized_end=290,
 )
 
 _CERTIFICATEREQUESTMESSAGE_NAME.containing_type = _CERTIFICATEREQUESTMESSAGE;
+_CERTIFICATEREQUESTMESSAGE_KEYDATA.containing_type = _CERTIFICATEREQUESTMESSAGE;
+_CERTIFICATEREQUESTMESSAGE_SERIAL.containing_type = _CERTIFICATEREQUESTMESSAGE;
 _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST.fields_by_name['keyName'].message_type = _CERTIFICATEREQUESTMESSAGE_NAME
 _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST.containing_type = _CERTIFICATEREQUESTMESSAGE;
 _CERTIFICATEREQUESTMESSAGE.fields_by_name['command'].message_type = _CERTIFICATEREQUESTMESSAGE_CERTIFICATEREQUEST
@@ -125,6 +174,18 @@ class CertificateRequestMessage(message.Message):
     DESCRIPTOR = _CERTIFICATEREQUESTMESSAGE_NAME
     
     # @@protoc_insertion_point(class_scope:CertificateRequestMessage.Name)
+  
+  class KeyData(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _CERTIFICATEREQUESTMESSAGE_KEYDATA
+    
+    # @@protoc_insertion_point(class_scope:CertificateRequestMessage.KeyData)
+  
+  class Serial(message.Message):
+    __metaclass__ = reflection.GeneratedProtocolMessageType
+    DESCRIPTOR = _CERTIFICATEREQUESTMESSAGE_SERIAL
+    
+    # @@protoc_insertion_point(class_scope:CertificateRequestMessage.Serial)
   
   class CertificateRequest(message.Message):
     __metaclass__ = reflection.GeneratedProtocolMessageType

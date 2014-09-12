@@ -2,10 +2,15 @@ message CertificateRequestMessage {
 	message Name {
 		repeated bytes components = 8;
 	}
+    message KeyData {
+    }
+    message Serial {
+    }
 	message CertificateRequest {
 		required Name keyName = 220;
         required uint32 keyType = 221;
-		required bytes keyBits = 222;
+        required bytes keyBits = 222;
+        required bytes serial = 219;
 	}
 	required CertificateRequest command = 223;
 }

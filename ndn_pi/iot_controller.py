@@ -12,7 +12,7 @@ from pyndn.encoding import ProtobufTlv
 
 from base_node import BaseNode
 
-from ndn_pi.commands.cert_request_pb2 import CertificateRequestMessage
+from commands.cert_request_pb2 import CertificateRequestMessage
 from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
 from commands.configure_device_pb2 import DeviceConfigurationMessage
 
@@ -75,20 +75,22 @@ class IotController(BaseNode):
 # Initial configuration
 #######
     # TODO: deviceSuffix will be replaced by deviceSerial
-    def _addDeviceToNetwork(self, deviceSerial, deviceSuffix, salt=''):
+    def _addDeviceToNetwork(self, deviceSerial, newDeviceSuffix, salt=''):
         saltedKey = deviceSerial+salt
         h = HmacHelper(saltedKey)
-        self._hmacDevices[deviceSuffix] = h
+        self._hmacDevices[deviceSerial] = h
+        print h.key.encode('hex')
 
         d = DeviceConfigurationMessage()
-        for i in range(self.networkPrefix.size()):
-            component = self.networkPrefix.get(i)
-            d.configuration.networkPrefix.components.append(component.toEscapedString())
-         
-        for i in range(self.deviceSuffix.size()):
-            component = self.deviceSuffix.get(i)
-            d.configuration.controllerName.components.append(component.toEscapedString())
-        interestName = Name('/localhop/configure').append(Name(deviceSuffix))
+
+        for source, dest in [(self.networkPrefix, d.configuration.networkPrefix),
+                             (self.deviceSuffix, d.configuration.controllerName),
+                             (newDeviceSuffix, d.configuration.deviceSuffix)]:
+            for i in range(source.size()):
+                component = source.get(i)
+                dest.components.append(component.getValue().toRawStr())
+
+        interestName = Name('/localhop/configure').append(Name(deviceSerial))
         encodedParams = ProtobufTlv.encode(d)
         interestName.append(encodedParams)
         interest = Interest(interestName)
@@ -98,21 +100,20 @@ class IotController(BaseNode):
             self._deviceAdditionTimedOut)
 
     def _deviceAdditionTimedOut(self, interest):
-        deviceSuffix = str(interest.getName().get(2).getValue())
-        self.log.warn("Timed out trying to configure device " + deviceSuffix)
+        deviceSerial = str(interest.getName().get(2).getValue())
+        self.log.warn("Timed out trying to configure device " + deviceSerial)
         # don't try again
-        self._hmacDevices.pop(deviceSuffix)
+        self._hmacDevices.pop(deviceSerial)
 
     def _deviceAdditionResponse(self, interest, data):
         status = data.getContent().toRawStr()
-        deviceSuffix = str(interest.getName().get(2).getValue())
-        hmacChecker = self._hmacDevices[deviceSuffix]
+        deviceSerial = str(interest.getName().get(2).getValue())
+        hmacChecker = self._hmacDevices[deviceSerial]
         if (hmacChecker.verifyData(data)): 
-            self.log.info("Received {} from {}".format(status, deviceSuffix))
+            self.log.info("Received {} from {}".format(status, deviceSerial))
         else:
-            self.log.warn("Received invalid HMAC from {}".format(deviceSuffix))
+            self.log.warn("Received invalid HMAC from {}".format(deviceSerial))
         
-
 ######
 # Certificate signing
 ######
@@ -124,29 +125,24 @@ class IotController(BaseNode):
 
         This expects an HMAC signed interest.
         """
-        commandParamsTlv = interest.getName().get(self.prefix.size()+1)
-
         message = CertificateRequestMessage()
+        commandParamsTlv = interest.getName().get(self.prefix.size()+1)
         ProtobufTlv.decode(message, commandParamsTlv.getValue())
-
-        keyComponents = message.command.keyName.components
-        keyName = Name("/".join(keyComponents))
-        identityName = keyName.getPrefix(-1)
-
-        self.log.debug("Key name: " + keyName.toUri())
-
-        suffixStart = self.networkPrefix.size()
-        deviceSuffix = identityName.getSubName(suffixStart).toUri().strip('/')
+        deviceSerial = str(message.command.serial)
 
         response = Data(interest.getName())
         certData = None
         hmac = None
         try:
-            hmac = self._hmacDevices[deviceSuffix]
+            hmac = self._hmacDevices[deviceSerial]
             if hmac.verifyInterest(interest):
                 certData = self._createCertificateFromRequest(message)
-        except KeyError, SecurityException:
-            pass
+        except KeyError:
+            self.log.warn('Received certificate request for device with no registered key')
+        except SecurityException:
+            self.log.warn('Could not create device certificate')
+        else:
+            self.log.info('Creating certificate for device {}'.format(deviceSerial))
 
         if certData is not None:
             response.setContent(certData.wireEncode())
@@ -163,8 +159,11 @@ class IotController(BaseNode):
         """
         # TODO: Verify the certificate was actually signed with the private key
         # matching the public key we are issuing a cert for!!
+
         keyComponents = message.command.keyName.components
         keyName = Name("/".join(keyComponents))
+
+        self.log.debug("Key name: " + keyName.toUri())
 
         if not self._policyManager.getEnvironmentPrefix().match(keyName):
             # we do not issue certs for keys outside of our network
@@ -309,8 +308,9 @@ class IotController(BaseNode):
         # for testing
         else:
             serial = '00000000534733c2'
+            # serial = '00000000d1f25339'
             suffix = 'default'
-            self._loop.call_later(5, self._addDeviceToNetwork, serial, suffix)
+            self._loop.call_later(5, self._addDeviceToNetwork, serial, Name(suffix))
             
 
 

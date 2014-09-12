@@ -9,9 +9,9 @@ from google.protobuf import descriptor_pb2
 
 
 DESCRIPTOR = descriptor.FileDescriptor(
-  name='commands/update-capabilities.proto',
+  name='update-capabilities.proto',
   package='',
-  serialized_pb='\n\"commands/update-capabilities.proto\"\x98\x03\n UpdateCapabilitiesCommandMessage\x12\x43\n\x0c\x63\x61pabilities\x18\xe5\x01 \x03(\x0b\x32,.UpdateCapabilitiesCommandMessage.Capability\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe3\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe4\x01 \x01(\t\x1a\xc9\x01\n\nCapability\x12>\n\rcommandPrefix\x18\xe0\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe1\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe2\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter\x12\x17\n\x0eneedsSignature\x18\xe6\x01 \x01(\x08')
+  serialized_pb='\n\x19update-capabilities.proto\"\x98\x03\n UpdateCapabilitiesCommandMessage\x12\x43\n\x0c\x63\x61pabilities\x18\xe5\x01 \x03(\x0b\x32,.UpdateCapabilitiesCommandMessage.Capability\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe3\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe4\x01 \x01(\t\x1a\xc9\x01\n\nCapability\x12>\n\rcommandPrefix\x18\xe0\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe1\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe2\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter\x12\x17\n\x0eneedsSignature\x18\xe6\x01 \x01(\x08')
 
 
 
@@ -39,8 +39,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_NAME = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=144,
-  serialized_end=170,
+  serialized_start=135,
+  serialized_end=161,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER = descriptor.Descriptor(
@@ -73,8 +73,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=172,
-  serialized_end=243,
+  serialized_start=163,
+  serialized_end=234,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY = descriptor.Descriptor(
@@ -121,8 +121,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=246,
-  serialized_end=447,
+  serialized_start=237,
+  serialized_end=438,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE = descriptor.Descriptor(
@@ -148,8 +148,8 @@ _UPDATECAPABILITIESCOMMANDMESSAGE = descriptor.Descriptor(
   options=None,
   is_extendable=False,
   extension_ranges=[],
-  serialized_start=39,
-  serialized_end=447,
+  serialized_start=30,
+  serialized_end=438,
 )
 
 _UPDATECAPABILITIESCOMMANDMESSAGE_NAME.containing_type = _UPDATECAPABILITIESCOMMANDMESSAGE;
