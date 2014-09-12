@@ -38,6 +38,10 @@ from pyndn.security.security_exception import SecurityException
 
 from security.hmac_helper import HmacHelper
 
+from collections import namedtuple
+
+Command = namedtuple('Command', ['suffix', 'function', 'keywords', 'isSigned'])
+
 default_prefix = Name('/localhop/configure')
 
 #TODO: get key to use from config?
@@ -59,33 +63,31 @@ class IotNode(BaseNode):
         """
         super(IotNode, self).__init__(configFilename)
         self.deviceSuffix = None
+
+        self._commands = []
+        
         
         self.deviceSerial = self.getSerial()
 
-        # TODO: generate a salt and then make the hmac handler
         self.prefix = Name(default_prefix).append(self.deviceSerial)
-        self._salt = None 
-        self._hmacHandler = HmacHelper(self.deviceSerial)
 
         self._certificateTimeouts = 0
 
 ###
 # Startup and shutdown
 ###
+    def _createNewPin(self):
+        pin = HmacHelper.generatePin() 
+        self._hmacHandler = HmacHelper(pin.decode('hex'))
+        return pin
+        
+
     def _beforeLoopStart(self):
-        print("My serial is {}".format(self.getSerial()))
+        print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
         self.tempPrefixId = self._face.registerPrefix(self.prefix, 
             self._onConfigurationReceived, self.onRegisterFailed)
 
 
-    def setupComplete(self):
-        """
-        Entry point for user-defined behavior. After this is called, the 
-        certificates are in place and capabilities have been sent to the 
-        controller. The node can now search for other devices, set up
-        control logic, etc
-        """
-        pass
 
 #####
 # Pre-configuration flow
@@ -281,6 +283,7 @@ class IotNode(BaseNode):
         self.log.debug('Received {}'.format(data.getName().toUri()))
         if not self._setupComplete:
             self._setupComplete = True
+            self.log.info('Setup complete')
             self._loop.call_soon(self.setupComplete)
 
     def _onCapabilitiesTimeout(self, interest):
@@ -295,24 +298,18 @@ class IotNode(BaseNode):
         fullCommandName = Name(self._policyManager.getTrustRootIdentity()
                 ).append('updateCapabilities')
         capabilitiesMessage = UpdateCapabilitiesCommandMessage()
-        try:
-            allCommands = self.config["device/command"]
-        except KeyError:
-            pass # no commands
-        else:
-            for command in allCommands:
-                commandName = Name(self.prefix).append(Name(command["name"][0].value))
-                capability = capabilitiesMessage.capabilities.add()
-                for i in range(commandName.size()):
-                    capability.commandPrefix.components.append(
-                            str(commandName.get(i).getValue()))
-                for node in command["keyword"]:
-                    capability.keywords.append(node.value)
-                try:
-                    command["authorize"]
-                    capability.needsSignature = True
-                except KeyError:
-                    pass
+
+        for command in self._commands:
+            commandName = Name(self.prefix).append(Name(command.suffix))
+            capability = capabilitiesMessage.capabilities.add()
+            for i in range(commandName.size()):
+                capability.commandPrefix.components.append(
+                        str(commandName.get(i).getValue()))
+
+            for kw in command.keywords:
+                capability.keywords.append(kw)
+
+            capability.needsSignature = command.isSigned
 
         encodedCapabilities = ProtobufTlv.encode(capabilitiesMessage)
         fullCommandName.append(encodedCapabilities)
@@ -343,8 +340,9 @@ class IotNode(BaseNode):
     def unknownCommandResponse(self, interest):
         """
         Called when the node receives an interest where the handler is unknown or unimplemented.
-        :return pyndn.Data: the Data packet to return in case of unhandled interests. Return None
+        :return: the Data packet to return in case of unhandled interests. Return None
             to ignore and let the interest timeout or be handled by another node.
+        :rtype: pyndn.Data
         """
         responseData = Data(Name(interest.getName()).append("unknown"))
         responseData.setContent("Unknown command name")
@@ -372,39 +370,87 @@ class IotNode(BaseNode):
         # we dispatch directly or after verification as necessary
 
         # now we look for the first command that matches in our config
-        allCommands = self.config["device/command"]
         self.log.debug("Received {}".format(interest.getName().toUri()))
         
-        for command in allCommands:
-            fullCommandName = Name(self.prefix).append(Name(str(command["name"][0].value)))
+        for command in self._commands:
+            fullCommandName = Name(self.prefix).append(Name(command.suffix))
             if fullCommandName.match(interest.getName()):
-                dispatchFunctionName = command["functionName"][0].value
-                try:
-                    func = self.__getattribute__(dispatchFunctionName)
-                except AttributeError:
-                    # command not implemented
-                    responseData = self.unknownCommandResponse(interest)
-                    if responseData is not None:
-                        self.sendData(responseData, transport)
-                    return
-            
-                try:
-                    command["authorize"][0]
-                except KeyError, IndexError:
-                    # no need to authorize, just run
-                    responseData = func(interest)
+                dispatchFunc = command.function
+                
+                if not command.isSigned:
+                    responseData = dispatchFunc(interest)
                     self.sendData(responseData, transport)
-                    return 
-            
-                # requires verification
-                try:
-                    self._keyChain.verifyInterest(interest, 
-                            self._makeVerifiedCommandDispatch(func, transport),
-                            self.verificationFailed)
-                    return
-                except Exception as e:
-                    self.log.exception("Exception while verifying command", exc_info=True)
-                    self.verificationFailed(interest)
-                    return
+                else:
+                    try:
+                        self._keyChain.verifyInterest(interest, 
+                                self._makeVerifiedCommandDispatch(dispatchFunc, transport),
+                                self.verificationFailed)
+                        return
+                    except Exception as e:
+                        self.log.exception("Exception while verifying command", exc_info=True)
+                        self.verificationFailed(interest)
+                        return
         #if we get here, just let it timeout
         return
+
+#####
+# Setup methods
+####
+    def addCommand(self, suffix, dispatchFunc, keywords=[], isSigned=True):
+        """
+        Install a command. When an interest is expressed for 
+        /<node prefix>/<suffix>, dispatchFunc will be called with the interest
+         name to get the reply data. 
+
+        :param Name suffix: The command name. This will be appended to the node
+            prefix.
+        
+        :param list keywords: A list of strings that can be used to look up this
+            command in the controller's directory.
+        
+        :param function dispatchFunc: A function that is called when the 
+            command is received. It must take an Interest argument and return a 
+            Data object or None.
+
+        :param boolean isSigned: Whether the command must be signed. If this is
+            True and an unsigned command is received, it will be immediately
+            rejected, and dispatchFunc will not be called.
+        """
+        if (suffix.size() == 0):
+            raise RuntimError("Command suffix is empty")
+        suffixUri = suffix.toUri()
+
+        for command in self._commands:
+            if (suffixUri == command.suffix):
+                raise RuntimeError("Command is already registered")
+
+        newCommand = Command(suffix=suffixUri, function=dispatchFunc, 
+                keywords=tuple(keywords), isSigned=isSigned)
+
+        self._commands.append(newCommand)
+
+    def removeCommand(self, suffix):
+        """
+        Unregister a command. Does nothing if the command does not exist.
+
+        :param Name suffix: The command name. 
+        """
+        suffixUri = suffix.ToUri()
+        toRemove = None
+        for command in self._commands:
+            if (suffixUri == command.suffix):
+                toRemove = command
+                break
+        if toRemove is not None:
+            self._commands.remove(toRemove)
+
+
+    def setupComplete(self):
+        """
+        Entry point for user-defined behavior. After this is called, the 
+        certificates are in place and capabilities have been sent to the 
+        controller. The node can now search for other devices, set up
+        control logic, etc
+        """
+        pass
+

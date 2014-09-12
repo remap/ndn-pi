@@ -36,6 +36,18 @@ class HmacHelper(object):
         else:
             self.wireFormat = wireFormat
 
+    @staticmethod
+    def generatePin():
+        """
+        Generate a pin to be entered into another device.
+        Restricting this to 8 bytes (16 hex chars) for now.
+        """
+        pin = bytearray(8)
+        random = SystemRandom()
+        for i in range(8):
+            pin[i] = random.randint(0,0xff)
+        return str(pin).encode('hex')
+
     def signData(self, data):
         s = Sha256HmacSignature()
         data.setSignature(s)

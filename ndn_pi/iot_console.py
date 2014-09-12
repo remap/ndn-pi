@@ -20,7 +20,7 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 from __future__ import print_function
-from ndn_pi.iot_node import IotNode
+from iot_node import IotNode
 from pyndn import Name, Data, Interest
 import json
 from sys import stdin, stdout

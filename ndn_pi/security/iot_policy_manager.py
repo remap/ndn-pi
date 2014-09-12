@@ -54,8 +54,8 @@ class IotPolicyManager(ConfigPolicyManager):
 
     def updateTrustRules(self, deviceIdentity):
         """
-        Should be called after the device identity, trust root or environment
-        prefix changes.
+        Should be called after either the device identity, trust root or network
+        prefix is changed.
 
         Not called automatically in case they are all changing (typical for
         bootstrapping).
@@ -120,13 +120,15 @@ class IotPolicyManager(ConfigPolicyManager):
 
     def getEnvironmentPrefix(self):
         """
-        :return pyndn.Name: The root of the network namespace
+        :return: The root of the network namespace
+        :rtype: pyndn.Name
         """
         return self._environmentPrefix
 
     def hasRootCertificate(self):
         """
-        :return boolean: Whether we've downloaded the controller's network certificate
+        :return: Whether we've downloaded the controller's network certificate
+        :rtype: boolean
         """
         try:
             rootCertName = self._identityStorage.getDefaultCertificateNameForIdentity(
@@ -142,17 +144,18 @@ class IotPolicyManager(ConfigPolicyManager):
             return False
 
     def hasRootSignedCertificate(self):
-       """
-       :return boolean: Whether we've received a network certificate from our controller
-       """
-       try:
-           myCertName = self._identityStorage.getDefaultCertificateNameForIdentity(
+        """
+        :return: Whether we've received a network certificate from our controller
+        :rtype: boolean
+        """
+        try:
+            myCertName = self._identityStorage.getDefaultCertificateNameForIdentity(
                        self._identityStorage.getDefaultIdentity())
-           myCert = self._identityStorage.getCertificate(myCertName)
-           if self._trustRootIdentity.match(
+            myCert = self._identityStorage.getCertificate(myCertName)
+            if self._trustRootIdentity.match(
                    myCert.getSignature().getKeyLocator().getKeyName()):
                return True
-       except SecurityException:
+        except SecurityException:
            pass
        
-       return False
+        return False

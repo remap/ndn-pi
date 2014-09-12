@@ -1,9 +1,10 @@
-Enforce localhost security with some default key '/localhost/operator' created in ndn-config
-
-Expose insertIntoCapabilities, expand to include a function to call
+Add a hook for the controller to add devices (probably a console-like interface?)
 
 Update ndn-config; need separate utility for configuring controller and
-general nodes
+general nodes 
+    -OR- 
+Use insertIntoCapabilities and put the convention in the README
 
-Add a hook for the controller to add devices (maybe a console-like interface?)
+Extend the private key storage so we can  generate keys (no more ndnsec calls!)
 
+Put localhop configuration in environment variable/config file

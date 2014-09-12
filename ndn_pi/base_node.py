@@ -86,7 +86,8 @@ class BaseNode(object):
 
     def getLogger(self):
         """
-        :return logging.Logger: The logger associated with this node
+        :return: The logger associated with this node
+        :rtype: logging.Logger
         """
         return self.log
 
@@ -176,7 +177,8 @@ class BaseNode(object):
         """
         Find and return the serial number of the Raspberry Pi. Provided in case
         you wish to distinguish data from nodes with the same name by serial.
-        :return str: The serial number extracted from device information in /proc/cpuinfo
+        :return: The serial number extracted from device information in /proc/cpuinfo
+        :rtype: str
         """
         with open('/proc/cpuinfo') as f:
             for line in f:

@@ -75,11 +75,9 @@ class IotController(BaseNode):
 # Initial configuration
 #######
     # TODO: deviceSuffix will be replaced by deviceSerial
-    def _addDeviceToNetwork(self, deviceSerial, newDeviceSuffix, salt=''):
-        saltedKey = deviceSerial+salt
-        h = HmacHelper(saltedKey)
+    def _addDeviceToNetwork(self, deviceSerial, newDeviceSuffix, pin):
+        h = HmacHelper(pin)
         self._hmacDevices[deviceSerial] = h
-        print h.key.encode('hex')
 
         d = DeviceConfigurationMessage()
 
@@ -310,7 +308,8 @@ class IotController(BaseNode):
             serial = '00000000534733c2'
             # serial = '00000000d1f25339'
             suffix = 'default'
-            self._loop.call_later(5, self._addDeviceToNetwork, serial, Name(suffix))
+            pin = 'db263ba112722824'
+            self._loop.call_later(5, self._addDeviceToNetwork, serial, Name(suffix), pin.decode('hex'))
             
 
 
