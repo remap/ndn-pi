@@ -1,10 +1,5 @@
-Add a hook for the controller to add devices (probably a console-like interface?)
-
-Update ndn-config; need separate utility for configuring controller and
-general nodes 
-    -OR- 
-Use insertIntoCapabilities and put the convention in the README
-
 Extend the private key storage so we can  generate keys (no more ndnsec calls!)
+
+Replace ndn-config with something that sets up controller name and network name
 
 Put localhop configuration in environment variable/config file

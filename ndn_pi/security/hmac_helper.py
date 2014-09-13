@@ -36,8 +36,8 @@ class HmacHelper(object):
         else:
             self.wireFormat = wireFormat
 
-    @staticmethod
-    def generatePin():
+    @classmethod
+    def generatePin(cls):
         """
         Generate a pin to be entered into another device.
         Restricting this to 8 bytes (16 hex chars) for now.
@@ -47,6 +47,20 @@ class HmacHelper(object):
         for i in range(8):
             pin[i] = random.randint(0,0xff)
         return str(pin).encode('hex')
+    
+    @classmethod
+    def extractInterestSignature(cls, interest, wireFormat=None):
+        if wireFormat is None:
+            wireFormat = WireFormat.getDefaultWireFormat()
+
+        try:
+            signature = wireFormat.decodeSignatureInfoAndValue(
+                            interest.getName().get(-2).getValue().buf(),
+                            interest.getName().get(-1).getValue().buf())
+        except:
+            signature = None
+
+        return signature
 
     def signData(self, data, keyName=None, wireFormat=None):
         data.setSignature(Sha256HmacSignature())
@@ -108,10 +122,8 @@ class HmacHelper(object):
         if wireFormat is None:
             wireFormat = WireFormat.getDefaultWireFormat()
 
-        signature = wireFormat.decodeSignatureInfoAndValue(
-                        interest.getName().get(-2).getValue().buf(),
-                        interest.getName().get(-1).getValue().buf())
-
+        signature = self.extractInterestSignature(interest, wireFormat)
         encoding = interest.wireEncode(wireFormat)
         hasher = hmac.new(self.key, encoding.toSignedBuffer(), sha256)
         return signature.getSignature().toRawStr() == hasher.digest()
+

@@ -107,7 +107,7 @@ class IotNode(BaseNode):
         else:
             configComponent = None
             replyData.setContent('500')
-        self._hmacHandler.signData(replyData)
+        self._hmacHandler.signData(replyData, keyName=self.prefix)
         transport.send(replyData.wireEncode().buf())
 
         if configComponent is not None:
@@ -177,15 +177,13 @@ class IotNode(BaseNode):
         for component in range(newKeyName.size()):
             message.command.keyName.components.append(newKeyName.get(component).toEscapedString())
 
-        message.command.serial = (self.deviceSerial)
-
         paramComponent = ProtobufTlv.encode(message)
 
         interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
         print interestName.get(-1).toEscapedString()
         interest = Interest(interestName)
         interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
-        self._hmacHandler.signInterest(interest)
+        self._hmacHandler.signInterest(interest, keyName=self.prefix)
 
         self.log.info("Sending certificate request to controller")
         self.log.debug("Certificate request: "+interest.getName().toUri())
@@ -248,7 +246,8 @@ class IotNode(BaseNode):
         # unregister localhop prefix, register new prefix, change identity
         self.prefix = self._configureIdentity
         self._identityStorage.setDefaultIdentity(self.prefix)
-        
+        self._face.setCommandCertificateName(
+            self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
 
         self._face.removeRegisteredPrefix(self.tempPrefixId)
         self._face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
@@ -316,6 +315,12 @@ class IotNode(BaseNode):
         interest = Interest(fullCommandName)
         interest.setInterestLifetimeMilliseconds(5000)
         self._face.makeCommandInterest(interest)
+        signature = self._policyManager._extractSignature(interest)
+
+        # XXX: temporary debugging because sometimes identities get messed up
+        if not self.prefix.match(signature.getKeyLocator().getKeyName()):
+            import pdb; pdb.set_trace()
+
         self.log.info("Sending capabilities to controller")
         self._face.expressInterest(interest, self._onCapabilitiesAck, self._onCapabilitiesTimeout)
      

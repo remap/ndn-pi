@@ -1,7 +1,9 @@
+from __future__ import print_function
 
 import logging
 import time
 import sys
+from sys import stdin, stdout
 import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
@@ -27,6 +29,12 @@ try:
     import asyncio
 except ImportError:
     import trollius as asyncio
+
+# more Python 2+3 compatibility
+try:
+    input = raw_input
+except NameError:
+    pass
 
 class IotController(BaseNode):
     """
@@ -66,6 +74,8 @@ class IotController(BaseNode):
         self._directory[keyword].append({'signed':isSigned, 'name':newUri})
 
     def _beforeLoopStart(self):
+        self._face.setCommandSigningInfo(self._keyChain,
+            self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
         self._face.registerPrefix(self.prefix, 
             self._onCommandReceived, self.onRegisterFailed)
         self._loop.call_soon(self.onStartup)
@@ -126,7 +136,9 @@ class IotController(BaseNode):
         message = CertificateRequestMessage()
         commandParamsTlv = interest.getName().get(self.prefix.size()+1)
         ProtobufTlv.decode(message, commandParamsTlv.getValue())
-        deviceSerial = str(message.command.serial)
+
+        signature = HmacHelper.extractInterestSignature(interest)
+        deviceSerial = str(signature.getKeyLocator().getKeyName().get(-1).getValue())
 
         response = Data(interest.getName())
         certData = None
@@ -209,6 +221,8 @@ class IotController(BaseNode):
         certificateName = signature.getKeyLocator().getKeyName()
         senderIdentity = IdentityCertificate.certificateNameToPublicKeyName(certificateName).getPrefix(-1)
 
+        if senderIdentity.match(self.prefix):
+            import pdb; pdb.set_trace()
         # get the params from the interest name
         messageComponent = interest.getName().get(self.prefix.size()+1)
         message = UpdateCapabilitiesCommandMessage()
@@ -225,7 +239,7 @@ class IotController(BaseNode):
                 capabilityPrefix.append(component)
             commandUri = capabilityPrefix.toUri()
             if not senderIdentity.match(capabilityPrefix):
-                self.log.warn("Node {} tried to register another prefix: {}".format(
+                self.log.error("Node {} tried to register another prefix: {}".format(
                     senderIdentity.toUri(),commandUri))
             for keyword in capability.keywords:
                 if capabilityPrefix not in self._directory[keyword]:
@@ -303,15 +317,86 @@ class IotController(BaseNode):
             #this is an ERROR - we are the root!
             self.log.critical("Controller has no certificate! Try running ndn-config with the configuration file.")
             self.stop()
-        # for testing
         else:
-            serial = '00000000534733c2'
-            # serial = '00000000d1f25339'
-            suffix = 'default'
-            pin = 'db263ba112722824'
-            self._loop.call_later(5, self._addDeviceToNetwork, serial, Name(suffix), pin.decode('hex'))
-            
+            # begin taking add requests
+            self._loop.call_soon(self.displayMenu)
+            self._loop.add_reader(stdin, self.handleUserInput) 
 
+    def displayMenu(self):
+        menuStr = "\n"
+        menuStr += "P)air a new device with serial and PIN\n"
+        menuStr += "D)irectory listing\n"
+        menuStr += "E)xpress an interest\n"
+        menuStr += "Q)uit\n"
+
+        print(menuStr)
+        print ("> ", end="")
+        stdout.flush()
+
+    def listDevices(self):
+        menuStr = ''
+        for capability, commands in self._directory.items():
+            menuStr += '{}:\n'.format(capability)
+            for info in commands:
+                signingStr = 'signed' if info['signed'] else 'unsigned'
+                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
+        print(menuStr)
+        self._loop.call_soon(self.displayMenu)
+
+    def onInterestTimeout(self, interest):
+        print('Interest timed out: {}'.interest.getName().toUri())
+
+    def onDataReceived(self, interest, data):
+        print('Received data named: {}'.format(data.getName().toUri()))
+        print('Contents:\n{}'.format(data.getContent().toRawStr()))
+    
+    def expressInterest(self):
+        try:
+            interestName = input('Interest name: ')
+            if len(interestName):
+                toSign = input('Signed? (y/N): ').upper().startswith('Y')
+                interest = Interest(Name(interestName))
+                interest.setInterestLifetimeMilliseconds(5000)
+                if (toSign):
+                    self._face.makeCommandInterest(interest) 
+                self._face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
+            else:
+                print("Aborted")
+        except KeyboardInterrupt:
+                print("Aborted")
+        finally:
+                self._loop.call_soon(self.displayMenu)
+
+    def beginPairing(self):
+        try:
+            deviceSerial = input('Device serial: ') 
+            devicePin = input('PIN: ')
+            deviceSuffix = input('Node name: ')
+        except KeyboardInterrupt:
+               print('Pairing attempt aborted')
+        else:
+            if len(deviceSerial) and len(devicePin) and len(deviceSuffix):
+                self._addDeviceToNetwork(deviceSerial, Name(deviceSuffix), 
+                    devicePin.decode('hex'))
+            else:
+               print('Pairing attempt aborted')
+        finally:
+            self._loop.call_soon(self.displayMenu)
+
+    def handleUserInput(self):
+        inputStr = stdin.readline().upper()
+        if inputStr.startswith('D'):
+            self.listDevices()
+        elif inputStr.startswith('P'):
+            self.beginPairing()
+        elif inputStr.startswith('E'):
+            self.expressInterest()
+        elif inputStr.startswith('Q'):
+            self.stop()
+        else:
+            self._loop.call_soon(self.displayMenu)
+            
+        
 
 if __name__ == '__main__':
     try:
