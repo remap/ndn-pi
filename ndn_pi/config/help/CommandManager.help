@@ -1,6 +1,0 @@
-DEVICE COMMAND LIST
-===================
-
-Here you can add, delete, and edit the commands that your device responds to.
-A '*' next to a command name indicates that the sender must digitally sign the
-command.
