@@ -57,11 +57,11 @@ class IotController(BaseNode):
         self.deviceSuffix = Name(self.config["device/controllerName"][0].value)
         self.networkPrefix = Name(self.config["device/environmentPrefix"][0].value)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
-        self._identityStorage.setDefaultIdentity(self.prefix)
 
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
         self._policyManager.setTrustRootIdentity(self.prefix)
-        self._policyManager.updateTrustRules(self.prefix)
+        self._policyManager.setDeviceIdentity(self.prefix)
+        self._policyManager.updateTrustRules()
         
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
@@ -84,8 +84,7 @@ class IotController(BaseNode):
         self._baseDirectory[keyword] = [{'signed':isSigned, 'name':newUri}]
 
     def beforeLoopStart(self):
-        self.face.setCommandSigningInfo(self._keyChain,
-            self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
+        self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
         self.face.registerPrefix(self.prefix, 
             self._onCommandReceived, self.onRegisterFailed)
         self.loop.call_soon(self.onStartup)
@@ -213,7 +212,7 @@ class IotController(BaseNode):
 
         # sign this new certificate
         certificate.encode()
-        self._keyChain.sign(certificate, self._keyChain.getDefaultCertificateName())
+        self._keyChain.sign(certificate, self.getDefaultCertificateName())
         # store it for later use + verification
         self._identityStorage.addCertificate(certificate)
         return certificate
@@ -288,7 +287,6 @@ class IotController(BaseNode):
 
     def _onCommandReceived(self, prefix, interest, transport, prefixId):
         """
-        Does not handle commands set in ndn-config, only the built in commands.
         """
         interestName = interest.getName()
 

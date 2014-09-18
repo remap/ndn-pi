@@ -1,6 +1,6 @@
-Extend the private key storage so we can  generate keys (no more ndnsec calls!)
-
 Rewrite the README, TUTORIAL and the examples (!)
+
+Add the generate RSA functions to IotIdentityManager
 
 Remove console from controller, create separate utility that uses user keys
 

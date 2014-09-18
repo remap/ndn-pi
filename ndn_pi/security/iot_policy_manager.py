@@ -50,15 +50,21 @@ class IotPolicyManager(ConfigPolicyManager):
         """
 
         # use the default configuration where possible
+        # TODO: use environment variable for this, fall back to default
+        path = os.path.dirname(__file__)
+        templateFilename = os.path.join(path, '.default.conf')
+        self._configTemplate = BoostInfoParser()
+        self._configTemplate.read(templateFilename)
+
         if configFilename is None:
-            path = os.path.dirname(__file__)
-            configFilename = os.path.join(path, '.default.conf')
+            configFilename = templateFilename
 
         super(IotPolicyManager, self).__init__(identityStorage, configFilename)
         self.setEnvironmentPrefix(None)
         self.setTrustRootIdentity(None)
+        self.setDeviceIdentity(None)
 
-    def updateTrustRules(self, deviceIdentity):
+    def updateTrustRules(self):
         """
         Should be called after either the device identity, trust root or network
         prefix is changed.
@@ -68,22 +74,18 @@ class IotPolicyManager(ConfigPolicyManager):
 
         Resets the validation rules if we don't have a trust root or enivronment
 
-        :param pyndn.Name deviceIdentity: The default signing identity for this policy manager
         """
-        # TODO: use environment variable for this, fall back to default
-        templateFile = '/usr/local/etc/ndn/iot/default.conf'
-        newConfig = BoostInfoParser()
-        newConfig.read(templateFile)
-        validatorTree = newConfig["validator"][0]
+        validatorTree = self._configTemplate["validator"][0].clone()
 
         if (self._environmentPrefix.size() > 0 and 
-            self._trustRootIdentity.size() > 0):
+            self._trustRootIdentity.size() > 0 and 
+            self._deviceIdentity.size() > 0):
             # don't sneak in a bad identity
-            if not self._environmentPrefix.match(deviceIdentity):
+            if not self._environmentPrefix.match(self._deviceIdentity):
                 raise SecurityException("Device identity does not belong to configured network!")
             
             environmentUri = self._environmentPrefix.toUri()
-            deviceUri = deviceIdentity.toUri()
+            deviceUri = self._deviceIdentity.toUri()
              
             for rule in validatorTree["rule"]:
                 ruleId = rule["id"][0].value
@@ -132,6 +134,12 @@ class IotPolicyManager(ConfigPolicyManager):
         """
         return self._environmentPrefix
 
+    def getDeviceIdentity(self):
+        return self._deviceIdentity
+
+    def setDeviceIdentity(self, identity):
+        self._deviceIdentity = Name(identity)
+
     def hasRootCertificate(self):
         """
         :return: Whether we've downloaded the controller's network certificate
@@ -157,7 +165,7 @@ class IotPolicyManager(ConfigPolicyManager):
         """
         try:
             myCertName = self._identityStorage.getDefaultCertificateNameForIdentity(
-                       self._identityStorage.getDefaultIdentity())
+                       self._deviceIdentity)
             myCert = self._identityStorage.getCertificate(myCertName)
             if self._trustRootIdentity.match(
                    myCert.getSignature().getKeyLocator().getKeyName()):
@@ -166,3 +174,13 @@ class IotPolicyManager(ConfigPolicyManager):
            pass
        
         return False
+
+    def removeTrustRules(self):
+        """
+        Resets the network prefix, device identity and trust root identity to
+         empty values
+        """
+        self.setDeviceIdentity(None)
+        self.setTrustRootIdentity(None)
+        self.setEnvironmentPrefix(None)
+        self.updateTrustRules()

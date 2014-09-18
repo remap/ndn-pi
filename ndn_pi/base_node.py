@@ -25,9 +25,11 @@ from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.security import KeyChain
 from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.identity import IdentityManager
+from pyndn.security.security_exception import SecurityException
 
 from security.iot_identity_storage import IotIdentityStorage
 from security.iot_policy_manager import IotPolicyManager
+from security.iot_identity_manager import IotIdentityManager
 
 from collections import namedtuple
 
@@ -50,7 +52,7 @@ class BaseNode(object):
         super(BaseNode, self).__init__()
 
         self._identityStorage = IotIdentityStorage()
-        self._identityManager = IdentityManager(self._identityStorage)
+        self._identityManager = IotIdentityManager(self._identityStorage)
         self._policyManager = IotPolicyManager(self._identityStorage)
 
         # hopefully there is some private/public key pair available
@@ -99,6 +101,14 @@ class BaseNode(object):
         """
         pass
 
+    def getDefaultCertificateName(self):
+        try:
+            certName = self._identityStorage.getDefaultCertificateNameForIdentity( 
+                self._policyManager.getDeviceIdentity())
+        except SecurityException:
+            certName = self._keyChain.getDefaultCertificateName()
+
+        return certName
 
     def start(self):
         """
@@ -108,7 +118,7 @@ class BaseNode(object):
         self.log.info("Starting up")
         self.loop = asyncio.get_event_loop()
         self.face = ThreadsafeFace(self.loop, '')
-        self.face.setCommandSigningInfo(self._keyChain, self._keyChain.getDefaultCertificateName())
+        self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
         self._keyChain.setFace(self.face)
 
         self._isStopped = False
@@ -137,7 +147,7 @@ class BaseNode(object):
         Sign the data with our network certificate
         :param pyndn.Data data: The data to sign
         """
-        self._keyChain.sign(data, self._keyChain.getDefaultCertificateName())
+        self._keyChain.sign(data, self.getDefaultCertificateName())
 
     def sendData(self, data, transport, sign=True):
         """

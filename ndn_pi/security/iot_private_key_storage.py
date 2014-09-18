@@ -51,25 +51,12 @@ class IotPrivateKeyStorage(FilePrivateKeyStorage):
         :return: The signature, or an isNull() Blob pointer if signing fails.
         :rtype: Blob
         """
-        keyURI = keyName.toUri()
-
-        if not self.doesKeyExist(keyName, KeyClass.PRIVATE):
-            raise SecurityException(
-              "FilePrivateKeyStorage.sign: private key doesn't exist")
-
         if digestAlgorithm != DigestAlgorithm.SHA256:
             raise SecurityException(
               "FilePrivateKeyStorage.sign: Unsupported digest algorithm")
 
-        # Read the private key.
-        base64Content = None
-        with open(self.nameTransform(keyURI, ".pri")) as keyFile:
-            base64Content = keyFile.read()
-        der = base64.b64decode(base64Content)
-        if not type(der) is str:
-            der = "".join(map(chr, der))
-
-        privateKey = RSA.importKey(der)
+        der = self.getPrivateKey(keyName)
+        privateKey = RSA.importKey(der.toRawStr())
         
         # Sign the hash of the data.
         if sys.version_info[0] == 2:
@@ -119,27 +106,23 @@ class IotPrivateKeyStorage(FilePrivateKeyStorage):
         with open(newPath, 'w') as keyFile:
             keyFile.write(encodedDer)
 
-
-    def nameTransform(self, keyName, extension):
+    def getPrivateKey(self, keyName):
         """
-        Create a file path from keyName and the extension
-        
-        :param str keyName: The key name URI.
-        :param str extension: The desired file name extension, e.g. ".pri".
-        :return: The file path.
-        :rtype: str
+        Fetch a private key from the store.
+        :param Name keyName: The name of the private key to look up.
+        :return: The binary DER encoding of the private key bits
+        :rtype: Blob
         """
-        hashInput = keyName
-        if sys.version_info[0] > 2:
-            # In Python 2.x, hash uses a str. Otherwise use Blob to convert.
-            hashInput = Blob(keyName, False).toBuffer()        
-        hash = SHA256.new(hashInput).digest()
-        
-        digest = base64.b64encode(hash)
-        if type(digest) != str:
-            # In Python 3, this is bytes, so convert to a str.
-            digest = "".join(map(chr, digest))
-        digest = digest.strip()
-        digest = digest.replace('/', '%')
+        keyURI = keyName.toUri()
 
-        return os.path.join(self._keyStorePath, digest + extension)
+        if not self.doesKeyExist(keyName, KeyClass.PRIVATE):
+            raise SecurityException(
+              "FilePrivateKeyStorage.sign: private key doesn't exist")
+
+        # Read the private key.
+        base64Content = None
+        with open(self.nameTransform(keyURI, ".pri")) as keyFile:
+            base64Content = keyFile.read()
+        der = base64.b64decode(base64Content)
+
+        return Blob(der)

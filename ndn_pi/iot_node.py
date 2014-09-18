@@ -140,7 +140,7 @@ class IotNode(BaseNode):
         can sign us a certificate that can be used with other nodes in the network.
         """
 
-        #TODO: GENERATE A NEW PUBLIC/PRIVATE PAIR
+        #TODO: GENERATE A NEW PUBLIC/PRIVATE PAIR INSTEAD OF COPYING
         makeKey = False
         try:
             defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(keyIdentity)
@@ -158,10 +158,17 @@ class IotNode(BaseNode):
 
         if makeKey:
             try:
-                self._identityStorage.addKey(newKeyName, keyType, keyDer)
+                privateDer = self._identityManager.getPrivateKey(defaultKey)
             except SecurityException:
-                # TODO: key shouldn't exist...
+                # XXX: is recovery impossible?
                 pass
+            else:
+                try:
+                    self._identityStorage.addKey(newKeyName, keyType, keyDer)
+                    self._identityManager.addPrivateKey(newKeyName, privateDer)
+                except SecurityException:
+                    # TODO: key shouldn't exist...
+                    pass
 
         message = CertificateRequestMessage()
         message.command.keyType = keyType
@@ -209,7 +216,8 @@ class IotNode(BaseNode):
     
             rootCertName = newCert.getSignature().getKeyLocator().getKeyName()
             # update trust rules so we trust the controller
-            self._policyManager.updateTrustRules(self._configureIdentity)
+            self._policyManager.setDeviceIdentity(self._configureIdentity) 
+            self._policyManager.updateTrustRules()
 
             def onRootCertificateDownload(interest, data):
                 try:
@@ -238,9 +246,9 @@ class IotNode(BaseNode):
 
         # unregister localhop prefix, register new prefix, change identity
         self.prefix = self._configureIdentity
-        self._identityStorage.setDefaultIdentity(self.prefix)
-        self.face.setCommandCertificateName(
-            self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
+        self._policyManager.setDeviceIdentity(self.prefix)
+
+        self.face.setCommandCertificateName(self.getDefaultCertificateName())
 
         self.face.removeRegisteredPrefix(self.tempPrefixId)
         self.face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
@@ -250,11 +258,7 @@ class IotNode(BaseNode):
     def _certificateValidationFailed(self, data):
         self.log.error("Certificate from controller is invalid!")
         # remove trust info
-        self._policyManager.setTrustRootIdentity(None)
-        self._policyManager.setEnvironmentPrefix(None)
-
-        self.deviceSuffix = None
-        self._policyManager.updateTrustRules(None)
+        self._policyManager.removeTrustRules()
 
     def _onCertificateReceived(self, interest, data):
         # if we were successful, the content of this data is an HMAC
@@ -309,10 +313,6 @@ class IotNode(BaseNode):
         interest.setInterestLifetimeMilliseconds(5000)
         self.face.makeCommandInterest(interest)
         signature = self._policyManager._extractSignature(interest)
-
-        # XXX: temporary debugging because sometimes identities get messed up
-        if not self.prefix.match(signature.getKeyLocator().getKeyName()):
-            import pdb; pdb.set_trace()
 
         self.log.info("Sending capabilities to controller")
         self.face.expressInterest(interest, self._onCapabilitiesAck, self._onCapabilitiesTimeout)

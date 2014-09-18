@@ -230,7 +230,12 @@ class IotIdentityStorage(BasicIdentityStorage):
             raise SecurityException("Key does not exist")
         
         keyId = keyName.get(-1).toEscapedString()
-        identityUri = keyName.getPrefix(-1).toUri()
+        if identityNameCheck is None:
+            identityName = keyName.getPrefix(-1)
+        else:
+            identityName = identityNameCheck
+
+        identityUri = identityName.toUri()
         try:
             cursor = None
             currentDefault = self.getDefaultKeyNameForIdentity(identityName)
