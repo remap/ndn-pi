@@ -24,22 +24,31 @@ from pyndn import Name, Data, Interest
 import RPi.GPIO as GPIO
 
 class LedNode(IotNode):
+    def __init__(self, pinNumber=24):
+        super(LedNode, self).__init__()
 
-    def __init__(self, configFilename):
-        super(LedNode, self).__init__(configFilename)
+        # can we tell if the pin number is invalid?
+        self.pinNumber = pinNumber
         GPIO.setmode(GPIO.BCM)
-        GPIO.setup(24, GPIO.OUT)
+        GPIO.setup(pinNumber, GPIO.OUT)
+    
+        onCommand = Name('setLight').append('on')
+        offCommand = Name('setLight').append('off')
+        self.addCommand(onCommand, self.onLightCommand, ['led', 'light'],
+            False)
+        self.addCommand(offCommand, self.onLightCommand, ['led', 'light'],
+            False)
 
     def onLightCommand(self, interest):
-        print("Light command")
+        self.log.debug("Light command")
         response = Data(interest.getName())
         try:
             commandTypeComponent = interest.getName().get(self.prefix.size()+1)
             commandType = commandTypeComponent.toEscapedString()
             if commandType == 'on':
-                GPIO.output(24, GPIO.HIGH)
+                GPIO.output(self.pinNumber, GPIO.HIGH)
             elif commandType == 'off':
-                GPIO.output(24, GPIO.LOW)
+                GPIO.output(self.pinNumber, GPIO.LOW)
             else:
                 raise RuntimeError('BadCommand')
             response.setContent('ACK')
@@ -50,10 +59,9 @@ class LedNode(IotNode):
 
 if __name__ == '__main__':
     import sys
-    import os
     try:
-	    fileName = sys.argv[1]
-    except IndexError:
-        fileName = os.path.join(os.path.dirname(__file__), 'led.conf')
-    node = LedNode(fileName)
+	    pinNumber = int(sys.argv[1])
+    except IndexError, ValueError:
+        pinNumber = 24
+    node = LedNode(pinNumber)
     node.start()

@@ -28,6 +28,9 @@ import subprocess
 import time
 
 class CecTv(IotNode):
+    def __init__(self):
+        super(CecTv, self).__init__()
+        self.addCommand(Name('sendCommand'), self.onCecCommand, ['cec'], True)
         
     def processCommands(self, message):
         PI = CecDevice.RECORDING_1
@@ -109,19 +112,14 @@ class CecTv(IotNode):
         self.log.debug("Received CEC command")
         # check command interest name
         # verify command interest
-        #self._face.verifyCommandInterest(interest)
         message = pb.CommandMessage()
         ProtobufTlv.decode(message, interest.getName().get(3).getValue())
-        self.processCommands(message)
+        self.loop.call_soon(self.processCommands, message)
 
         data = Data(interest.getName())
         data.setContent('ACK')
         return data
-        # check tv status
-        # turn on and play
-        # publish state data
 
 if __name__ == '__main__':
-    import logging
-    node = CecTv('cec_tv.conf')
+    node = CecTv()
     node.start()

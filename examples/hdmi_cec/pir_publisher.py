@@ -33,22 +33,16 @@ from ndn_pi.iot_node import IotNode
 import logging
 
 class PirPublisher(IotNode):
-    def __init__(self, configFileName):
-        super(PirPublisher, self).__init__(configFileName)
+    def __init__(self):
+        super(PirPublisher, self).__init__()
 
         # find the pins to set up from the config
-        pinList = []
-        allCommands = self.config["device/command"]
-        for command in allCommands:
-            keywords = command["keyword"]
-            for kw in keywords:
-                if kw.value == "pir":
-                    pinNumber = int(Name(command["name"][0].value).get(-1).toEscapedString())
-                    pinList.append(pinNumber)
-                    break
+        pinList = [18, 25]
 
         self._pirs = {}
         for pin in pinList:
+            readCommand = Name('read').append(str(pin))
+            self.addCommand(readCommand, self.onReadPir, ['pir'], False)
             pir = Pir(pin)
             self._pirs[pin] = {"device":pir, "lastVal":pir.read(), "lastTime":int(time.time()*1000)}
 
@@ -103,5 +97,5 @@ class PirPublisher(IotNode):
 
 
 if __name__ == '__main__':
-    node = PirPublisher('pir.conf')
+    node = PirPublisher()
     node.start()

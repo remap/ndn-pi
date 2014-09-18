@@ -1,5 +1,5 @@
 Extend the private key storage so we can  generate keys (no more ndnsec calls!)
 
-Replace ndn-config with something that sets up controller name and network name
+Rewrite the README, TUTORIAL and the examples (!)
 
 Put localhop configuration in environment variable/config file

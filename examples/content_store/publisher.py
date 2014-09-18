@@ -19,13 +19,15 @@ class CachedContentPublisher(IotNode):
         super(CachedContentPublisher, self).__init__(configFile)
         self._missedRequests = 0
         self._dataPrefix = Name(self.prefix).append('data')
+        self.addCommand(Name('listPrefixes'), self.listDataPrefixes, ['repo'],
+            False)
 
     def setupComplete(self):
         # The cache will clear old values every 100s
-        self._dataCache = MemoryContentCache(self._face, 100000)
+        self._dataCache = MemoryContentCache(self.face, 100000)
         self.registerCachePrefix()
         print "Serving data at {}".format(self._dataPrefix.toUri())
-        self._loop.call_soon(self.publishData)
+        self.loop.call_soon(self.publishData)
 
     def listDataPrefixes(self, interest):
         d = Data(interest.getName())
@@ -72,7 +74,7 @@ class CachedContentPublisher(IotNode):
         self._dataCache.add(dataOut)
 
         # repeat every 5 seconds
-        self._loop.call_later(5, self.publishData)
+        self.loop.call_later(5, self.publishData)
 
 if __name__ == '__main__':
     try:

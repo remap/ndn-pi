@@ -25,21 +25,20 @@ import RPi.GPIO as GPIO
 
 class LedNode(IotNode):
 
-    def __init__(self, configFilename):
+    def __init__(self):
         GPIO.setmode(GPIO.BCM)
-        super(LedNode, self).__init__(configFilename)
-        # find the pins to set up from the config
+        super(LedNode, self).__init__()
+        # set up our pin commands
 
-        self.pinList = []
-        allCommands = self.config["device/command"]
-        for command in allCommands:
-            keywords = command["keyword"]
-            for kw in keywords:
-                if kw.value == "led":
-                    pinNumber = int(Name(command["name"][0].value).get(-1).toEscapedString())
-	            GPIO.setup(pinNumber, GPIO.OUT)
-                    self.pinList.append(pinNumber)
-                    break
+        self.pinList = [24, 17]
+        for pinNumber in pinList:
+            GPIO.setup(pinNumber, GPIO.OUT)
+            onCommand = Name('setLight').append(str(pinNumber)).append('on')
+            offCommand = Name('setLight').append(str(pinNumber)).append('off')
+            self.addCommand(onCommand, self.onLightCommand,
+                 ['led', 'light'], False)
+            self.addCommand(offCommand, self.onLightCommand,
+                 ['led', 'light'], False)
 
     def onLightCommand(self, interest):
         response = Data(interest.getName())
@@ -64,11 +63,5 @@ class LedNode(IotNode):
         return response
 
 if __name__ == '__main__':
-    import sys
-    import os
-    try:
-	    fileName = sys.argv[1]
-    except IndexError:
-        fileName = os.path.join(os.path.dirname(__file__), 'led_multi.conf')
-    node = LedNode(fileName)
+    node = LedNode()
     node.start()

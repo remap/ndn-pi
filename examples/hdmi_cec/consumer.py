@@ -31,8 +31,8 @@ from app.remote_device import RemoteDevice
 import json
 
 class Consumer(IotNode):
-    def __init__(self, configFile):
-        super(Consumer, self).__init__(configFile)
+    def __init__(self):
+        super(Consumer, self).__init__()
         self._countExpressedInterests = 0
         self._callbackCountData = 0
         self._callbackCountUniqueData = 0
@@ -43,8 +43,8 @@ class Consumer(IotNode):
     def setupComplete(self):
         #fetch the pir list from the controller
         #once we have at least one pir, we can issue the interests
-        self._loop.call_soon(self.requestDeviceList)
-        self._loop.call_soon(self.expressInterestPirAndRepeat)
+        self.loop.call_soon(self.requestDeviceList)
+        self.loop.call_soon(self.expressInterestPirAndRepeat)
 
     def getPirs(self):
         return [ x for x in self._deviceList if x.type == "pir" ]
@@ -61,7 +61,7 @@ class Consumer(IotNode):
     def requestDeviceList(self):
         # do this periodically, like every 5 seconds
         interestName = Name(self._policyManager.getTrustRootIdentity()).append('listDevices')
-        self._face.expressInterest(interestName, self.onDataPirList, self.onPirListTimeout)
+        self.face.expressInterest(interestName, self.onDataPirList, self.onPirListTimeout)
 
     def onDataPirList(self, interest, data):
         payload = json.loads(data.getContent().toRawStr())
@@ -94,11 +94,11 @@ class Consumer(IotNode):
 
         self._deviceList = newDeviceList
 
-        self._loop.call_later(5, self.requestDeviceList)
+        self.loop.call_later(5, self.requestDeviceList)
 
     def onPirListTimeout(self, interest):
         #try again later
-        self._loop.call_later(15, self.requestDeviceList)
+        self.loop.call_later(15, self.requestDeviceList)
 
     def findDeviceIdMatching(self, matchPrefix):
         for d in self._deviceList:
@@ -144,7 +144,7 @@ class Consumer(IotNode):
             interest.setInterestLifetimeMilliseconds(1000.0)
             interest.setChildSelector(1)
 
-            self._face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
+            self.face.expressInterest(interest, self.onDataPir, self.onTimeoutPir)
             self._countExpressedInterests += 1
             debugStr = "Sent interest: " + interest.getName().toUri()
             debugStr += "\tExclude: " + interest.getExclude().toUri()
@@ -152,7 +152,7 @@ class Consumer(IotNode):
  
             self.log.debug(debugStr)
         # Reschedule again in 0.5 sec
-        self._loop.call_later(1.0, self.expressInterestPirAndRepeat)
+        self.loop.call_later(1.0, self.expressInterestPirAndRepeat)
 
     # Cec Control
     def onDataCec(self, interest, data):
@@ -177,8 +177,8 @@ class Consumer(IotNode):
                 message.commands.append(pb.PLAY)
                 encodedMessage = ProtobufTlv.encode(message)
                 interest = Interest(Name(cec.id).append(encodedMessage))
-                # self._face.makeCommandInterest(interest)
-                self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
+                # self.face.makeCommandInterest(interest)
+                self.face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
         elif count == 0:
             # TODO: Send command interest to TV
             self.log.info("turn off tv")
@@ -188,9 +188,9 @@ class Consumer(IotNode):
                 message.commands.append(pb.STANDBY)
                 encodedMessage = ProtobufTlv.encode(message)
                 interest = Interest(Name(cec.id).append(encodedMessage))
-                # self._face.makeCommandInterest(interest)
-                self._face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
+                # self.face.makeCommandInterest(interest)
+                self.face.expressInterest(interest, self.onDataCec, self.onTimeoutCec)
 
 if __name__ == '__main__':
-    n = Consumer('consumer.conf')
+    n = Consumer()
     n.start()
