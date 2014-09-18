@@ -8,6 +8,7 @@ import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
+from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
@@ -50,12 +51,17 @@ class IotController(BaseNode):
     def __init__(self, configFilename):
         super(IotController, self).__init__()
         
+        self.config = BoostInfoParser()
         self.config.read(configFilename)
 
         self.deviceSuffix = Name(self.config["device/controllerName"][0].value)
         self.networkPrefix = Name(self.config["device/environmentPrefix"][0].value)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
         self._identityStorage.setDefaultIdentity(self.prefix)
+
+        self._policyManager.setEnvironmentPrefix(self.networkPrefix)
+        self._policyManager.setTrustRootIdentity(self.prefix)
+        self._policyManager.updateTrustRules(self.prefix)
         
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
@@ -78,11 +84,11 @@ class IotController(BaseNode):
         self._baseDirectory[keyword] = [{'signed':isSigned, 'name':newUri}]
 
     def beforeLoopStart(self):
-        self._face.setCommandSigningInfo(self._keyChain,
+        self.face.setCommandSigningInfo(self._keyChain,
             self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
-        self._face.registerPrefix(self.prefix, 
+        self.face.registerPrefix(self.prefix, 
             self._onCommandReceived, self.onRegisterFailed)
-        self._loop.call_soon(self.onStartup)
+        self.loop.call_soon(self.onStartup)
 
 
 ######
@@ -108,7 +114,7 @@ class IotController(BaseNode):
         interest = Interest(interestName)
         h.signInterest(interest)
 
-        self._face.expressInterest(interest, self._deviceAdditionResponse,
+        self.face.expressInterest(interest, self._deviceAdditionResponse,
             self._deviceAdditionTimedOut)
 
     def _deviceAdditionTimedOut(self, interest):
@@ -225,13 +231,16 @@ class IotController(BaseNode):
         certificateName = signature.getKeyLocator().getKeyName()
         senderIdentity = IdentityCertificate.certificateNameToPublicKeyName(certificateName).getPrefix(-1)
 
+        self.log.info('Updating capabilities for {}'.format(senderIdentity.toUri()))
+
         # get the params from the interest name
         messageComponent = interest.getName().get(self.prefix.size()+1)
         message = UpdateCapabilitiesCommandMessage()
         ProtobufTlv.decode(message, messageComponent.getValue())
         # we remove all the old capabilities for the sender
+        tempDirectory = defaultdict(list)
         for keyword in self._directory:
-            self._directory[keyword] = [cap for cap in self._directory[keyword] 
+            tempDirectory[keyword] = [cap for cap in self._directory[keyword] 
                     if not senderIdentity.match(Name(cap['name']))]
 
         # then we add the ones from the message
@@ -241,13 +250,16 @@ class IotController(BaseNode):
                 capabilityPrefix.append(component)
             commandUri = capabilityPrefix.toUri()
             if not senderIdentity.match(capabilityPrefix):
-                self.log.error("Node {} tried to register another prefix: {}".format(
+                self.log.error("Node {} tried to register another prefix: {} - ignoring update".format(
                     senderIdentity.toUri(),commandUri))
-            for keyword in capability.keywords:
-                if capabilityPrefix not in self._directory[keyword]:
-                    listing = {'signed':capability.needsSignature,
-                            'name':capabilityPrefix.toUri()}
-                    self._directory[keyword].append(listing)
+            else:    
+                for keyword in capability.keywords:
+                    allUris = [info['name'] for info in tempDirectory[keyword]]
+                    if capabilityPrefix not in allUris:
+                        listing = {'signed':capability.needsSignature,
+                                'name':commandUri}
+                        tempDirectory[keyword].append(listing)
+        self._directory= tempDirectory
 
     def _prepareCapabilitiesList(self, interestName):
         """
@@ -321,8 +333,8 @@ class IotController(BaseNode):
             self.stop()
         else:
             # begin taking add requests
-            self._loop.call_soon(self.displayMenu)
-            self._loop.add_reader(stdin, self.handleUserInput) 
+            self.loop.call_soon(self.displayMenu)
+            self.loop.add_reader(stdin, self.handleUserInput) 
 
     def displayMenu(self):
         menuStr = "\n"
@@ -343,7 +355,7 @@ class IotController(BaseNode):
                 signingStr = 'signed' if info['signed'] else 'unsigned'
                 menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
         print(menuStr)
-        self._loop.call_soon(self.displayMenu)
+        self.loop.call_soon(self.displayMenu)
 
     def onInterestTimeout(self, interest):
         print('Interest timed out: {}'.interest.getName().toUri())
@@ -360,14 +372,14 @@ class IotController(BaseNode):
                 interest = Interest(Name(interestName))
                 interest.setInterestLifetimeMilliseconds(5000)
                 if (toSign):
-                    self._face.makeCommandInterest(interest) 
-                self._face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
+                    self.face.makeCommandInterest(interest) 
+                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
             else:
                 print("Aborted")
         except KeyboardInterrupt:
                 print("Aborted")
         finally:
-                self._loop.call_soon(self.displayMenu)
+                self.loop.call_soon(self.displayMenu)
 
     def beginPairing(self):
         try:
@@ -383,7 +395,7 @@ class IotController(BaseNode):
             else:
                print('Pairing attempt aborted')
         finally:
-            self._loop.call_soon(self.displayMenu)
+            self.loop.call_soon(self.displayMenu)
 
     def handleUserInput(self):
         inputStr = stdin.readline().upper()
@@ -396,16 +408,16 @@ class IotController(BaseNode):
         elif inputStr.startswith('Q'):
             self.stop()
         else:
-            self._loop.call_soon(self.displayMenu)
+            self.loop.call_soon(self.displayMenu)
             
         
 
 if __name__ == '__main__':
+    import os
     try:
         fileName = sys.argv[1]
     except IndexError:
-        fileName = '/usr/local/etc/ndn/iot/controller.conf'
-      
+        fileName = os.path.expanduser('~/.ndn/iot_controller.conf')
     
     n = IotController(fileName)
     n.start()

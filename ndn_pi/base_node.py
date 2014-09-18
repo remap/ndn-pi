@@ -29,6 +29,8 @@ from pyndn.security.identity import IdentityManager
 from security.iot_identity_storage import IotIdentityStorage
 from security.iot_policy_manager import IotPolicyManager
 
+from collections import namedtuple
+
 try:
     import asyncio
 except ImportError:

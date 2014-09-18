@@ -50,9 +50,9 @@ class IotPolicyManager(ConfigPolicyManager):
         """
 
         # use the default configuration where possible
-        if configFileName is None:
+        if configFilename is None:
             path = os.path.dirname(__file__)
-            configFileName = os.path.join(path, 'default.conf')
+            configFilename = os.path.join(path, '.default.conf')
 
         super(IotPolicyManager, self).__init__(identityStorage, configFilename)
         self.setEnvironmentPrefix(None)

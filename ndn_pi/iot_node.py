@@ -38,7 +38,6 @@ from pyndn.security.security_exception import SecurityException
 
 from security.hmac_helper import HmacHelper
 
-from collections import namedtuple
 
 
 default_prefix = Name('/localhop/configure')
