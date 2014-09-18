@@ -12,7 +12,7 @@ from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 
-from base_node import BaseNode
+from base_node import BaseNode, Command
 
 from commands.cert_request_pb2 import CertificateRequestMessage
 from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
@@ -48,8 +48,10 @@ class IotController(BaseNode):
     It is unlikely that you will need to subclass this.
     """
     def __init__(self, configFilename):
-        super(IotController, self).__init__(configFilename)
+        super(IotController, self).__init__()
         
+        self.config.read(configFilename)
+
         self.deviceSuffix = Name(self.config["device/controllerName"][0].value)
         self.networkPrefix = Name(self.config["device/environmentPrefix"][0].value)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
@@ -62,18 +64,20 @@ class IotController(BaseNode):
         # key is device serial, value is the HmacHelper
         self._hmacDevices = {}
 
+        # our capabilities
+        self._baseDirectory = {}
+
         # add the built-ins
         self._insertIntoCapabilities('listDevices', 'directory', False)
         self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
 
-    def _insertIntoCapabilities(self, commandName, keyword, isSigned):
-        """
-        Add a capability that is not listed in the configuration.
-        """
-        newUri = Name(self.prefix).append(Name(commandName)).toUri()
-        self._directory[keyword].append({'signed':isSigned, 'name':newUri})
+        self._directory.update(self._baseDirectory)
 
-    def _beforeLoopStart(self):
+    def _insertIntoCapabilities(self, commandName, keyword, isSigned):
+        newUri = Name(self.prefix).append(Name(commandName)).toUri()
+        self._baseDirectory[keyword] = [{'signed':isSigned, 'name':newUri}]
+
+    def beforeLoopStart(self):
         self._face.setCommandSigningInfo(self._keyChain,
             self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix))
         self._face.registerPrefix(self.prefix, 
@@ -221,8 +225,6 @@ class IotController(BaseNode):
         certificateName = signature.getKeyLocator().getKeyName()
         senderIdentity = IdentityCertificate.certificateNameToPublicKeyName(certificateName).getPrefix(-1)
 
-        if senderIdentity.match(self.prefix):
-            import pdb; pdb.set_trace()
         # get the params from the interest name
         messageComponent = interest.getName().get(self.prefix.size()+1)
         message = UpdateCapabilitiesCommandMessage()

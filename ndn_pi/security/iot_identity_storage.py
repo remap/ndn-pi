@@ -46,15 +46,6 @@ class IotIdentityStorage(BasicIdentityStorage):
         self._database.commit()
         cursor.close()
 
-    def revokeIdentity(self):    
-        """
-        Revoke the identity.
-        
-        :return: True if the identity was revoked, False if not.
-        :rtype: bool
-        """
-        raise RuntimeError("revokeIdentity is not implemented")
-
     def addKey(self, keyName, keyType, publicKeyDer):    
         """
         Add a public key to the identity storage.
@@ -99,24 +90,6 @@ class IotIdentityStorage(BasicIdentityStorage):
             (identityUri, keyId))
         (keyData, ) = cursor.fetchone()
         return Blob(bytearray(keyData))
-
-    def activateKey(self, keyName):    
-        """
-        Activate a key. If a key is marked as inactive, its private part will 
-        not be used in packet signing.
-        
-        :param Name keyName: The name of the key.
-        """
-        raise RuntimeError("activateKey is not implemented")
-
-    def deactivateKey(self, keyName):    
-        """
-        Deactivate a key. If a key is marked as inactive, its private part will 
-        not be used in packet signing.
-        
-        :param Name keyName: The name of the key.
-        """
-        raise RuntimeError("deactivateKey is not implemented")
 
     def doesCertificateExist(self, certificateName):    
         """
@@ -311,6 +284,3 @@ class IotIdentityStorage(BasicIdentityStorage):
 
         self._database.commit()
         cursor.close()
-
-if __name__ == '__main__':
-    i = IotIdentityStorage()

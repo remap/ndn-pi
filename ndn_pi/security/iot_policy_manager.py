@@ -42,12 +42,18 @@ for the certificate to be trusted.
 """
 
 class IotPolicyManager(ConfigPolicyManager):
-    def __init__(self, identityStorage, configFilename):
+    def __init__(self, identityStorage, configFilename=None):
         """
         :param pyndn.IdentityStorage: A class that stores signing identities and certificates.
         :param str configFilename: A configuration file specifying validation rules and network
             name settings.
         """
+
+        # use the default configuration where possible
+        if configFileName is None:
+            path = os.path.dirname(__file__)
+            configFileName = os.path.join(path, 'default.conf')
+
         super(IotPolicyManager, self).__init__(identityStorage, configFilename)
         self.setEnvironmentPrefix(None)
         self.setTrustRootIdentity(None)
@@ -61,6 +67,8 @@ class IotPolicyManager(ConfigPolicyManager):
         bootstrapping).
 
         Resets the validation rules if we don't have a trust root or enivronment
+
+        :param pyndn.Name deviceIdentity: The default signing identity for this policy manager
         """
         # TODO: use environment variable for this, fall back to default
         templateFile = '/usr/local/etc/ndn/iot/default.conf'
@@ -68,11 +76,10 @@ class IotPolicyManager(ConfigPolicyManager):
         newConfig.read(templateFile)
         validatorTree = newConfig["validator"][0]
 
-        if (self._environmentPrefix is not None and 
-            self._trustRootIdentity is not None):
+        if (self._environmentPrefix.size() > 0 and 
+            self._trustRootIdentity.size() > 0):
             # don't sneak in a bad identity
-            if (self._environmentPrefix is None or 
-                not self._environmentPrefix.match(deviceIdentity)):
+            if not self._environmentPrefix.match(deviceIdentity):
                 raise SecurityException("Device identity does not belong to configured network!")
             
             environmentUri = self._environmentPrefix.toUri()
