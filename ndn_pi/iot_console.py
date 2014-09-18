@@ -37,19 +37,19 @@ class ViewerNode(IotNode):
         self._lastPresentedList = []
 
     def setupComplete(self):
-        self._loop.call_soon(self.getDeviceList)
-        self._loop.call_soon(self.displayMenu)
-        self._loop.add_reader(stdin, self.handleUserInput)
+        self.loop.call_soon(self.getDeviceList)
+        self.loop.call_soon(self.displayMenu)
+        self.loop.add_reader(stdin, self.handleUserInput)
 
     def onTimeout(self, interest):
         #try again
         self.log.warn('Timeout on device list')
-        self._loop.call_later(5, self.getDeviceList)
+        self.loop.call_later(5, self.getDeviceList)
 
     def onReceivedList(self, interest, data):
         #print ("Received:\n{}".format(data.getContent().toRawStr()))
         self._networkListing = json.loads(data.getContent().toRawStr())
-        self._loop.call_later(30, self.getDeviceList)
+        self.loop.call_later(30, self.getDeviceList)
 
     def displayMenu(self):
         menuStr = ''
@@ -74,11 +74,11 @@ class ViewerNode(IotNode):
 
     def interestTimedOut(self, interest):
         self.log.warn("Timed out on light command")
-        self._loop.call_soon(self.displayMenu)
+        self.loop.call_soon(self.displayMenu)
 
     def lightAckReceived(self, interest, data):
         self.log.info("Received ack from lights")
-        self._loop.call_soon(self.displayMenu)
+        self.loop.call_soon(self.displayMenu)
 
 
     def handleUserInput(self):
@@ -98,17 +98,17 @@ class ViewerNode(IotNode):
                     commandInterest = Interest(Name(chosenName).append(commandType))
                     commandInterest.setInterestLifetimeMilliseconds(5000)
                     if chosenDevice["signed"]:
-                        self._face.makeCommandInterest(commandInterest)
-                    self._face.expressInterest(commandInterest, self.lightAckReceived, self.interestTimedOut)
+                        self.face.makeCommandInterest(commandInterest)
+                    self.face.expressInterest(commandInterest, self.lightAckReceived, self.interestTimedOut)
                 else:
-                    self._loop.call_soon(self.displayMenu)
+                    self.loop.call_soon(self.displayMenu)
             except IndexError, KeyError:
-                self._loop.call_soon(self.displayMenu)
+                self.loop.call_soon(self.displayMenu)
         
 
     def getDeviceList(self):
         interestName = Name(self._policyManager.getTrustRootIdentity()).append('listDevices')
-        self._face.expressInterest(interestName, self.onReceivedList, self.onTimeout)
+        self.face.expressInterest(interestName, self.onReceivedList, self.onTimeout)
 
 if __name__ == '__main__':
     import sys

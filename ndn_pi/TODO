@@ -2,4 +2,6 @@ Extend the private key storage so we can  generate keys (no more ndnsec calls!)
 
 Rewrite the README, TUTORIAL and the examples (!)
 
+Remove console from controller, create separate utility that uses user keys
+
 Put localhop configuration in environment variable/config file

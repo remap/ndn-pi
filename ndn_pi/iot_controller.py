@@ -371,6 +371,7 @@ class IotController(BaseNode):
                 toSign = input('Signed? (y/N): ').upper().startswith('Y')
                 interest = Interest(Name(interestName))
                 interest.setInterestLifetimeMilliseconds(5000)
+                interest.setChildSelector(1)
                 if (toSign):
                     self.face.makeCommandInterest(interest) 
                 self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)

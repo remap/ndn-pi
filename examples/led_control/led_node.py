@@ -24,7 +24,7 @@ from pyndn import Name, Data, Interest
 import RPi.GPIO as GPIO
 
 class LedNode(IotNode):
-    def __init__(self, pinNumber=24):
+    def __init__(self, pinNumber):
         super(LedNode, self).__init__()
 
         # can we tell if the pin number is invalid?
