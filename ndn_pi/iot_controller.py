@@ -48,14 +48,11 @@ class IotController(BaseNode):
         - addDevice: add a device based on HMAC
     It is unlikely that you will need to subclass this.
     """
-    def __init__(self, configFilename):
+    def __init__(self, nodeName, networkName):
         super(IotController, self).__init__()
         
-        self.config = BoostInfoParser()
-        self.config.read(configFilename)
-
-        self.deviceSuffix = Name(self.config["device/controllerName"][0].value)
-        self.networkPrefix = Name(self.config["device/environmentPrefix"][0].value)
+        self.deviceSuffix = Name(nodeName)
+        self.networkPrefix = Name(networkName)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
 
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
@@ -163,6 +160,8 @@ class IotController(BaseNode):
             hmac = self._hmacDevices[deviceSerial]
             if hmac.verifyInterest(interest):
                 certData = self._createCertificateFromRequest(message)
+                # remove this hmac; another request will require a new pin
+                self._hmacDevices.pop(deviceSerial)
         except KeyError:
             self.log.warn('Received certificate request for device with no registered key')
         except SecurityException:
@@ -198,7 +197,12 @@ class IotController(BaseNode):
         keyDer = Blob(message.command.keyBits)
         keyType = message.command.keyType
 
-        self._identityStorage.addKey(keyName, keyType, keyDer)
+        try:
+            self._identityStorage.addKey(keyName, keyType, keyDer)
+        except SecurityException:
+            # assume this is due to already existing?
+            pass
+
         certificate = self._identityManager.generateCertificateForKey(keyName)
 
         self._keyChain.sign(certificate, self.getDefaultCertificateName())
@@ -402,5 +406,9 @@ if __name__ == '__main__':
     except IndexError:
         fileName = os.path.expanduser('~/.ndn/iot_controller.conf')
     
-    n = IotController(fileName)
+    config = BoostInfoParser()
+    config.read(fileName)
+    deviceSuffix = Name(config["device/controllerName"][0].value)
+    networkPrefix = Name(config["device/environmentPrefix"][0].value)
+    n = IotController(deviceSuffix, networkPrefix)
     n.start()

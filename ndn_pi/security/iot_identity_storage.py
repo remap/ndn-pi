@@ -129,7 +129,7 @@ class IotIdentityStorage(BasicIdentityStorage):
         certCopy = IdentityCertificate(certificate)
         makeDefault = 0
         keyName = certCopy.getPublicKeyName()
-        keyInfo = certificate.getPublicKeyInfo()
+        keyInfo = certCopy.getPublicKeyInfo()
         if not self.doesKeyExist(keyName):
             self.addKey(keyName, keyInfo.getKeyType(), keyInfo.getKeyDer())
             makeDefault = 1

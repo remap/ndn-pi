@@ -1,8 +1,12 @@
+Version 1.0b
+------------
 Rewrite the README, TUTORIAL and the examples (!)
 
+Version 1.0
+-----------
 Remove console from controller, create separate utility that uses user keys
 
-Encryption
+Encrypt data
 
 Put localhop configuration in environment variable/config file
 

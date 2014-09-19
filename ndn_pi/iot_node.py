@@ -81,6 +81,7 @@ class IotNode(BaseNode):
         print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
         self.tempPrefixId = self.face.registerPrefix(self.prefix, 
             self._onConfigurationReceived, self.onRegisterFailed)
+        print self.tempPrefixId
 
 #####
 # Pre-configuration flow
@@ -97,13 +98,9 @@ class IotNode(BaseNode):
             # we have a match! decode the controller's name
             configComponent = interest.getName().get(prefix.size())
             replyData.setContent('200')
-        else:
-            configComponent = None
-            replyData.setContent('500')
-        self._hmacHandler.signData(replyData, keyName=self.prefix)
-        transport.send(replyData.wireEncode().buf())
+            self._hmacHandler.signData(replyData, keyName=self.prefix)
+            transport.send(replyData.wireEncode().buf())
 
-        if configComponent is not None:
             environmentConfig = DeviceConfigurationMessage()
             ProtobufTlv.decode(environmentConfig, configComponent.getValue()) 
             networkPrefix = self._extractNameFromField(environmentConfig.configuration.networkPrefix)
@@ -117,6 +114,7 @@ class IotNode(BaseNode):
 
             self._configureIdentity = Name(networkPrefix).append(self.deviceSuffix) 
             self._sendCertificateRequest(self._configureIdentity)
+        #else, ignore!
             
     def _onConfigurationRegistrationFailure(self, prefix):
         #this is so bad... try a few times
