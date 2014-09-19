@@ -1,7 +1,8 @@
 Rewrite the README, TUTORIAL and the examples (!)
 
-Add the generate RSA functions to IotIdentityManager
-
 Remove console from controller, create separate utility that uses user keys
 
+Encryption
+
 Put localhop configuration in environment variable/config file
+

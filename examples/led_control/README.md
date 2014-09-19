@@ -24,17 +24,17 @@ This node periodically asks the controller for a device listing, and presents
 a menu to the user allowing her to issue 'on' or 'off' commands to any node that
 offers an 'led' capability. 
 
-
 Setup
 -------
 
 ### LED Node
-This node expects to have an LED connected to GPIO pin 24. 
+This node expects to have an LED connected to GPIO pin 24 by default, but you can change the pin number by
+specifying a different number on the command line. 
 
 <Insert wiring diagram?>
 
 ### Multi-LED Node
-This node expects to have LEDs connected to GPIO pins 17 and 24. 
+This node expects to have LEDs connected to GPIO pins 17 and 24 by default. 
 
 <Insert wiring diagram?>
 
@@ -43,7 +43,7 @@ See the README.md in (ndn-pi path?) for NDN setup steps.
 
 Running the Example
 -------------------
-
+The nodes can be started in any order. When each 
 The controller node should be started first, using:
 
         python -m ndn_pi.iot_controller &

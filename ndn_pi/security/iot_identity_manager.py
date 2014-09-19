@@ -18,7 +18,15 @@
 # A copy of the GNU General Public License is in the file COPYING.
 
 from pyndn.security.identity import IdentityManager
+from pyndn.util.common import Common
+from pyndn.util import Blob
+from pyndn.name import Name
 from iot_private_key_storage import IotPrivateKeyStorage
+from Crypto.PublicKey import RSA
+from pyndn.security.security_types import KeyType
+from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
+from pyndn.security.security_exception import SecurityException
+import struct
 
 class IotIdentityManager(IdentityManager):
     """
@@ -33,3 +41,95 @@ class IotIdentityManager(IdentityManager):
 
     def addPrivateKey(self, keyName, keyDer):
         self._privateKeyStorage.addPrivateKey(keyName, keyDer)
+
+    def _getNewKeyBits(self, keySize):
+        # returns public and private key DER in blobs
+        key = RSA.generate(keySize)
+        publicDer = key.publickey().exportKey(format='DER')
+        privateDer = key.exportKey(format='DER', pkcs=8)
+        return (Blob(publicDer, False), Blob(privateDer, False))
+        
+
+    def generateRSAKeyPair(self, identityName, isKsk=False, keySize=2048):
+        """
+        Generate a pair of RSA keys for the specified identity.
+        
+        :param Name identityName: The name of the identity.
+        :param bool isKsk: (optional) true for generating a Key-Signing-Key 
+          (KSK), false for a Data-Signing-Key (DSK). If omitted, generate a
+          Data-Signing-Key.
+        :param int keySize: (optional) The size of the key. If omitted, use a 
+          default secure key size.
+        :return: The generated key name.
+        :rtype: Name
+        """
+        keyName = self._identityStorage.getNewKeyName(identityName, isKsk)
+        publicBits, privateBits = self._getNewKeyBits(keySize)
+        self._identityStorage.addKey(keyName, KeyType.RSA, publicBits)
+        self._privateKeyStorage.addPrivateKey(keyName, privateBits)
+
+        return keyName
+        
+
+    def generateRSAKeyPairAsDefault(self, identityName, isKsk=False, keySize=2048):
+        """
+        Generate a pair of RSA keys for the specified identity and set it as 
+        default key for the identity.
+        
+        :param NameidentityName: The name of the identity.
+        :param bool isKsk: (optional) true for generating a Key-Signing-Key 
+          (KSK), false for a Data-Signing-Key (DSK). If omitted, generate a 
+          Data-Signing-Key.
+        :param int keySize: (optional) The size of the key. If omitted, use a 
+          default secure key size.
+        :return: The generated key name.
+        :rtype: Name
+        """
+        newKeyName = self.generateRSAKeyPair(identityName, isKsk, keySize)
+        self._identityStorage.setDefaultKeyNameForIdentity(newKeyName)
+        return newKeyName
+    
+    def selfSign(self, keyName):
+        """
+        Generate a self-signed certificate for a public key.
+        
+        :param Name keyName: The name of the public key.
+        :return: The generated certificate.
+        :rtype: IdentityCertificate
+        """ 
+        certificate = self.generateCertificateForKey(keyName)
+        self.signByCertificate(certificate, certificate.getName())
+
+        return certificate
+
+    def generateCertificateForKey(self, keyName):
+        # let any raised SecurityExceptions bubble up
+        publicKeyBits = self._identityStorage.getKey(keyName)
+        publicKeyType = self._identityStorage.getKeyType(keyName)
+    
+        publicKey = PublicKey(publicKeyType, publicKeyBits)
+
+        timestamp = Common.getNowMilliseconds()
+    
+        # TODO: specify where the 'KEY' component is inserted
+        # to delegate responsibility for cert delivery
+        certificateName = keyName.getPrefix(-1).append('KEY').append(keyName.get(-1))
+        certificateName.append("ID-CERT").append(Name.Component(struct.pack(">Q", timestamp)))        
+
+        certificate = IdentityCertificate(certificateName)
+
+
+        certificate.setNotBefore(timestamp)
+        certificate.setNotAfter((timestamp + 30*86400*1000)) # about a month
+
+        certificate.setPublicKeyInfo(publicKey)
+
+        # ndnsec likes to put the key name in a subject description
+        sd = CertificateSubjectDescription("2.5.4.41", keyName.toUri())
+        certificate.addSubjectDescription(sd)
+
+        certificate.encode()
+
+        return certificate
+        
+

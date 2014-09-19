@@ -84,6 +84,13 @@ class IotController(BaseNode):
         self._baseDirectory[keyword] = [{'signed':isSigned, 'name':newUri}]
 
     def beforeLoopStart(self):
+        if not self._policyManager.hasRootSignedCertificate():
+            # make one....
+            self.log.warn('Generating controller certificate...')
+            newKey = self._identityManager.generateRSAKeyPairAsDefault(
+                self.prefix, isKsk=True)
+            newCert = self._identityManager.selfSign(newKey)
+            self._identityManager.addCertificateAsDefault(newCert)
         self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
         self.face.registerPrefix(self.prefix, 
             self._onCommandReceived, self.onRegisterFailed)
@@ -190,28 +197,10 @@ class IotController(BaseNode):
 
         keyDer = Blob(message.command.keyBits)
         keyType = message.command.keyType
-        publicKey = PublicKey(keyType, keyDer)
 
-        timestamp = (time.time())
+        self._identityStorage.addKey(keyName, keyType, keyDer)
+        certificate = self._identityManager.generateCertificateForKey(keyName)
 
-        # TODO: put the 'KEY' part after the environment prefix 
-        # to be responsible for cert delivery
-        certificateName = keyName.getPrefix(-1).append('KEY').append(keyName.get(-1))
-        certificateName.append("ID-CERT").append(Name.Component(struct.pack(">l", timestamp)))        
-
-        certificate = IdentityCertificate(certificateName)
-        # certificate expects time in milliseconds
-        certificate.setNotBefore(timestamp*1000)
-        certificate.setNotAfter((timestamp*1000 + 30*86400)) # about a month
-
-        certificate.setPublicKeyInfo(publicKey)
-
-        # ndnsec likes to put the key name in a subject description
-        sd = CertificateSubjectDescription("2.5.4.41", keyName.toUri())
-        certificate.addSubjectDescription(sd)
-
-        # sign this new certificate
-        certificate.encode()
         self._keyChain.sign(certificate, self.getDefaultCertificateName())
         # store it for later use + verification
         self._identityStorage.addCertificate(certificate)
@@ -325,14 +314,9 @@ class IotController(BaseNode):
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
-        if not self._policyManager.hasRootSignedCertificate():
-            #this is an ERROR - we are the root!
-            self.log.critical("Controller has no certificate! Try running ndn-config with the configuration file.")
-            self.stop()
-        else:
-            # begin taking add requests
-            self.loop.call_soon(self.displayMenu)
-            self.loop.add_reader(stdin, self.handleUserInput) 
+        # begin taking add requests
+        self.loop.call_soon(self.displayMenu)
+        self.loop.add_reader(stdin, self.handleUserInput) 
 
     def displayMenu(self):
         menuStr = "\n"
