@@ -19,10 +19,8 @@ This node directly controls an LED attached to a GPIO pin (by default, 24).
 This is a more customizable version of the LED node. It separately controls LEDs attached to the GPIO pins 
 (by default, 17 and 24).
 
-###Viewer Node
-This node periodically asks the controller for a device listing, and presents
-a menu to the user allowing her to issue 'on' or 'off' commands to any node that
-offers an 'led' capability. 
+###User Node
+This node periodically asks the controller for a device listing, and randomly sends an available LED command.
 
 Setup
 -------
@@ -39,26 +37,10 @@ This node expects to have LEDs connected to GPIO pins 17 and 24 by default.
 <Insert wiring diagram?>
 
 ### Network Setup      
-See the README.md in (ndn-pi path?) for NDN setup steps.    
+See the top-level README.md in ndn-pi for NDN network setup steps.    
 
 Running the Example
 -------------------
-The nodes can be started in any order. When each 
-The controller node should be started first, using:
+The nodes can be started in any order. Each node other than the controller will need to be paired, using the 'P' option in the controller menu.
+You can also use the 'D' option to see a listing of all commands available to the network.
 
-        python -m ndn_pi.iot_controller &
-
-Then the led nodes can be run using:
-
-        sudo -E ./led_node.py &
-
-and
-	    sudo -E ./led_multi_node.py &
-
-Finally, we can run the viewer node using:
-
-        ./viewer_node.py
-
-Only the viewer node is user-interactive. It presents a list of nodes on the
- network offering the 'led' capability, which can be refreshed by pressing Enter.
-The light on the LED nodes can be turned on and off using the menu. 

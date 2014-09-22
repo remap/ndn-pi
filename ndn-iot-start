@@ -1,0 +1,27 @@
+#!/bin/bash
+
+SHOW_USAGE=0
+INTERFACE=wlan0
+while getopts ":i:" opt; do
+  case $opt in
+    i) 
+      INTERFACE=$OPTARG
+      ;;
+    \?)
+      SHOW_USAGE=1
+      ;;
+    :)
+      SHOW_USAGE=1
+      ;;
+  esac
+done
+
+[[ $SHOW_USAGE -eq 1 ]] && { echo "Usage: $0 [-i interface_name]"; exit 1; }
+
+nfd-start
+
+IP_ADDR=`ifconfig $INTERFACE | grep -Eo 'inet addr:[0-9\.]*'| cut -d: -f2`
+FACE_ID=`nfd-status -f | grep $IP_ADDR | awk '{print $1}' | cut -d= -f2`
+
+nfdc register / $FACE_ID
+

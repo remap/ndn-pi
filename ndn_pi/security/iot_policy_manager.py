@@ -119,7 +119,7 @@ class IotPolicyManager(ConfigPolicyManager):
         """
         : return pyndn.Name: The trusted controller's network name.
         """
-        return self._trustRootIdentity
+        return Name(self._trustRootIdentity)
 
     def setEnvironmentPrefix(self, name):
         """
@@ -132,7 +132,7 @@ class IotPolicyManager(ConfigPolicyManager):
         :return: The root of the network namespace
         :rtype: pyndn.Name
         """
-        return self._environmentPrefix
+        return Name(self._environmentPrefix)
 
     def getDeviceIdentity(self):
         return self._deviceIdentity

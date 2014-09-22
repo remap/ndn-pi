@@ -27,15 +27,14 @@ If you are using multiple Raspberry Pis, they must all be connected to the same 
 or Ethernet. This allows interests and data to be multicast to the other nodes over UDP. To set up multicast,
 you must register your network an NDN multicast face.
 
-There is an installed script, ndn-iot-register, that will start the NDN forwarder and router if they are not 
+There is an installed script, ndn-iot-start, that will start the NDN forwarder and router if they are not 
 already running, and automatically route traffic from your nodes to the multicast face. It assumes that your 
-Pis are connected to a WiFi network with addresses in the 192.168.16.x range (the default configuration). If 
-your network configuration is different, you may run
+Pis are connected to a WiFi network, using the 'wlan0' interface. If you are using a different interface, e.g.
+'eth0' for ethernet, you may run
 
-        ndn-iot-register -s [address-range]
+        ndn-iot-start -i eth0
 
-where `address-range` is given in the form '192.168.1.0/24'. You can omit the address range to allow routing to any
-address, but this *may* allow access to your network from outside your LAN.
+replacing 'eth0' with the desired interface name. For a list of network interfaces on your Pi, run 'ifconfig'.
 
 If you wish to configure routing yourself **(not recommended)**, see [below](#manually-configuring-routing).
 
@@ -53,10 +52,13 @@ are creating network certificates for all other nodes in the network, and mainta
 services. 
 
 The configuration for the controller consists of just the network name (default is '/home') and the controller name
-(default is 'controller'). The default configuration file can be in /home/pi/.ndn/controller.conf.
+(default is 'controller'). The default configuration file can be in /home/pi/.ndn/controller.conf. To change controller settings, you
+may edit this file, or run the included ndn-iot-controller script:
+
+        ndn-iot-controller <network-name> <controller-name>
 
 When nodes other than the controller join the network, they must be added by the user, by providing a serial number and
-PIN. This prevents unknown machines from gaining access to your network commands. Use the menu provided by the controller to pair the new
+PIN. This prevents unknown machines from gaining access to protected network commands. Use the menu provided by the controller to pair the new
 node by entering 'P'. You will be prompted for the serial, PIN and a new name for your node. After a few seconds, the node will 
 finish its setup handshake with the controller and be ready to interact with the other nodes. You can use 'D' for 'directory' to
 see the commands available on the new node.
@@ -64,12 +66,15 @@ see the commands available on the new node.
 **Note:** Although multiple nodes may run on a single Raspberry Pi, the traffic from three or more nodes slow nfd down
 considerably, depending on the model of the Pi.
 
+**Note:** The directory may not correctly reflect the presence of multiple nodes with the same name. This limitation should be fixed in later
+versions.
+
 ### Examples
 
 This toolkit contains three examples that demonstrate common node and network setups.
 -	led\_control:	Control LEDs connected to the general purpose input/output (GPIO) pins over the network
 -	hdmi\_cec: 	Turn a CEC-enabled device on or off depending on room occupancy
--	content\_store: Save sensor readings for analysis or logging in a MemoryContentCache object
+-	content\_store: Save device statistics in a MemoryContentCache object for later analysis or logging 
 
 Try running these examples and going through the tutorial [TUTORIAL.md](TUTORIAL.md) to learn how nodes work together.
 
@@ -77,7 +82,7 @@ Try running these examples and going through the tutorial [TUTORIAL.md](TUTORIAL
 
 ### Manually configuring routing
 
-It is recommended that you use the included script, ndn-iot-register, but you can manually set up routing on your nodes with the following
+It is recommended that you use the included script, ndn-iot-start, but you can manually set up routing on your nodes with the following
 steps.
 
 1. Ensure that the Raspberry Pi is connected to the network (wired or wireless) that will host your IoT network.
@@ -98,7 +103,7 @@ steps.
 
         faceid=3 remote=udp4://224.0.23.170:56363 local=udp4://192.168.16.7:56356 ...
 
- Now you can tell the forwarder to route traffic to that face. Run
+4. Tell the forwarder to route traffic to the face you discovered in *3*.
 
         nfdc-register / <faceid>
 
@@ -124,6 +129,7 @@ The most important method for customizing nodes is `addCommand`:
     function must take an Interest object and return a Data object:
 
      ```python
+         # returns pyndn.Data or None
          def handlerFunction(interest):
              dataName = Name(interest.getName())
              # ... do some processing based on the interest
@@ -142,7 +148,7 @@ The most important method for customizing nodes is `addCommand`:
  - `isSigned`: By default, this is set to `False`. Setting this to `True` will allow only devices who are part of your network to
      invoke the command, by signing their command interests.
 
-Besides adding methods for interest handling with `addCommand`, nodes can be further customizes by overriding the
+Besides adding methods for interest handling with `addCommand`, nodes can be further customized by overriding the
 following methods:
 
 * setupComplete 
@@ -170,14 +176,12 @@ your own specialized handling of the interest and return a Data packet.
    Called when a command interest fails verification. The most common reasons for failing verification are invalid signatures, 
 and unsigned interests being sent when signed interests are expected. The default implementation logs the failure.
 
-Other useful methods are:
-
 * getSerial
 ```python
     def getSerial(self)
 ```
-   Reads the Raspberry Pi serial number from /proc/cpuinfo. Useful if you need some 
-identifier to distinguish Raspberry Pis with the same node name.
+   Reads the Raspberry Pi serial number from /proc/cpuinfo. You may override this to provide some other unique id for your
+Raspberry Pis or even individual IotNodes.
 
 ------
 

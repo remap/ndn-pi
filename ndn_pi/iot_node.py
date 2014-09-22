@@ -77,7 +77,6 @@ class IotNode(BaseNode):
         print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
         self.face.registerPrefix(self.prefix, 
             self._onConfigurationReceived, self.onRegisterFailed)
-        print self.tempPrefixId
 
 #####
 # Pre-configuration flow
@@ -175,7 +174,6 @@ class IotNode(BaseNode):
         paramComponent = ProtobufTlv.encode(message)
 
         interestName = Name(self._policyManager.getTrustRootIdentity()).append("certificateRequest").append(paramComponent)
-        print interestName.get(-1).toEscapedString()
         interest = Interest(interestName)
         interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
         self._hmacHandler.signInterest(interest, keyName=self.prefix)

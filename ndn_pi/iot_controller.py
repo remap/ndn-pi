@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import logging
 import time
-import sys
 from sys import stdin, stdout
 import struct
 
@@ -255,19 +254,10 @@ class IotController(BaseNode):
         Responds to a directory listing request with JSON
         """
         
-        try:
-            suffix = interestName.get(self.prefix.size()+1).toEscapedString()
-        except IndexError:
-            suffix = None
-
         dataName = Name(interestName).append(Name.Component.fromNumber(int(time.time())))
         response = Data(dataName)
-        if suffix is None:
-            toJsonify = self._directory
-        else:
-            toJsonify = self._directory[suffix]
 
-        response.setContent(json.dumps(toJsonify))
+        response.setContent(json.dumps(self._directory))
 
         return response
 
@@ -398,15 +388,25 @@ class IotController(BaseNode):
 
 if __name__ == '__main__':
     import os
-    from pyndn.util.boost_info_parser import BoostInfoParser
-    try:
-        fileName = sys.argv[1]
-    except IndexError:
+    import sys
+
+    nArgs = len(sys.argv) - 1
+    if nArgs == 0:
+        from pyndn.util.boost_info_parser import BoostInfoParser
         fileName = os.path.expanduser('~/.ndn/iot_controller.conf')
     
-    config = BoostInfoParser()
-    config.read(fileName)
-    deviceSuffix = Name(config["device/controllerName"][0].value)
-    networkPrefix = Name(config["device/environmentPrefix"][0].value)
+        config = BoostInfoParser()
+        config.read(fileName)
+        deviceName = config["device/controllerName"][0].value
+        networkName = config["device/environmentPrefix"][0].value
+    elif nArgs == 2:
+        networkName = sys.argv[1]
+        deviceName = sys.argv[2]
+    else:
+        print('Usage: {} [network-name controller-name]'.format(sys.argv[0]))
+        sys.exit(1)
+
+    deviceSuffix = Name(deviceName)
+    networkPrefix = Name(networkName)
     n = IotController(deviceSuffix, networkPrefix)
     n.start()
