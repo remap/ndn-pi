@@ -54,8 +54,9 @@ class LedUserNode(IotNode):
         try:
             chosenCommand = random.choice(self._ledCommands)
             interest = Interest(Name(chosenCommand))
-            self.log.info('Sending command {}'.format(chosenCommand))
-            self.face.makeCommandInterest(interest)
+            self.log.debug('Sending command {}'.format(chosenCommand))
+            # uncomment the following line to sign interests (slower than unsigned)
+            #self.face.makeCommandInterest(interest)
             self.face.expressInterest(interest, self.onCommandAck, self.onCommandTimeout)
         except IndexError:
             pass

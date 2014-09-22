@@ -41,6 +41,9 @@ See the top-level README.md in ndn-pi for NDN network setup steps.
 
 Running the Example
 -------------------
-The nodes can be started in any order. Each node other than the controller will need to be paired, using the 'P' option in the controller menu.
-You can also use the 'D' option to see a listing of all commands available to the network.
+The nodes can be started in any order, but the controller must be running to set up new nodes, using the 'P' option in the controller menu.
+You can also use the 'D' option to see a listing of all commands available to the network. 
+
+**Note**: If the controller goes down, nodes may keep running but will not be able to refresh their directories. Also, when the controller is
+restarted, it may take a while to receive updates from already running nodes.
 

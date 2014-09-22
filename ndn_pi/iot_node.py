@@ -35,7 +35,6 @@ from ndn_pi.security import HmacHelper
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
 
-
 default_prefix = Name('/localhop/configure')
 
 try:
@@ -309,6 +308,9 @@ class IotNode(BaseNode):
 
         self.log.info("Sending capabilities to controller")
         self.face.expressInterest(interest, self._onCapabilitiesAck, self._onCapabilitiesTimeout)
+
+        # update twice a minute
+        self.loop.call_later(30, self._updateCapabilities)
      
 ###
 # Interest handling

@@ -31,7 +31,7 @@ class LedNode(IotNode):
         # set up our pin commands
 
         self.pinList = [24, 17]
-        for pinNumber in pinList:
+        for pinNumber in self.pinList:
             GPIO.setup(pinNumber, GPIO.OUT)
             onCommand = Name('setLight').append(str(pinNumber)).append('on')
             offCommand = Name('setLight').append(str(pinNumber)).append('off')
