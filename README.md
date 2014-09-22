@@ -1,4 +1,4 @@
-Named Data Network Internet of Things Toolkit (NDN-IOTT)
+Named Data Network Internet of Things Toolkit (NDN-IoTT)
 ==========================
 
  Getting Started
@@ -23,37 +23,22 @@ a WiFi network named 'Raspi\_NDN' if a wireless interface is available. Alternat
 
 ### Network Configuration
 
-If nfd is not running, start it by typing
-
-        nfd-start
-
 If you are using multiple Raspberry Pis, they must all be connected to the same network, whether by WiFi 
 or Ethernet. This allows interests and data to be multicast to the other nodes over UDP. To set up multicast,
-you must register your network name on an NDN multicast face.
+you must register your network an NDN multicast face.
 
-If the Raspberry Pi is connected to only one network, you may simply use:
+There is an installed script, ndn-iot-register, that will start the NDN forwarder and router if they are not 
+already running, and automatically route traffic from your nodes to the multicast face. It assumes that your 
+Pis are connected to a WiFi network with addresses in the 192.168.16.x range (the default configuration). If 
+your network configuration is different, you may run
 
-        nfdc register /home 2
+        ndn-iot-register -s [address-range]
 
-If you change the default network prefix in the configuration files, you need to register your new network prefix instead.    
+where `address-range` is given in the form '192.168.1.0/24'. You can omit the address range to allow routing to any
+address, but this *may* allow access to your network from outside your LAN.
 
-If the Raspberry Pi has multiple network interfaces, you will need to use the 'nfd-status' command to determine the
-correct face to register. Run
+If you wish to configure routing yourself **(not recommended)**, see [below](#manually-configuring-routing).
 
-        nfd-status -f
-
-and look for lines containing `remote=udp4://224.0.23.170:56363`. Find the faceid
- that contains an IP address on the IoT network. For example, if your nodes are all on a WiFi network, and your 
-WiFi IP address is 192.168.16.7, you may find a line that reads
-
-        faceid=3 remote=udp4://224.0.23.170:56363 local=udp4://192.168.16.7:56356 ...
-
-You should then register the network prefix using
-
-        nfdc register /home 3
-
-**Note:** Although multiple nodes may run on a single Raspberry Pi, the traffic from three or more nodes slow nfd down
-considerably, depending on the model of the Pi.
 
 ### Running Your Iot Nodes
 
@@ -73,8 +58,11 @@ The configuration for the controller consists of just the network name (default 
 When nodes other than the controller join the network, they must be added by the user, by providing a serial number and
 PIN. This prevents unknown machines from gaining access to your network commands. Use the menu provided by the controller to pair the new
 node by entering 'P'. You will be prompted for the serial, PIN and a new name for your node. After a few seconds, the node will 
-finish its setup handshake with the controller and be ready to interact with the other nodes.
+finish its setup handshake with the controller and be ready to interact with the other nodes. You can use 'D' for 'directory' to
+see the commands available on the new node.
 
+**Note:** Although multiple nodes may run on a single Raspberry Pi, the traffic from three or more nodes slow nfd down
+considerably, depending on the model of the Pi.
 
 ### Examples
 
@@ -85,7 +73,34 @@ This toolkit contains three examples that demonstrate common node and network se
 
 Try running these examples and going through the tutorial [TUTORIAL.md](TUTORIAL.md) to learn how nodes work together.
 
-Note: In order to access the GPIO pins, an IotNode must be run as root.
+**Note: In order to access the GPIO pins, an IotNode must be run as root.**
+
+### Manually configuring routing
+
+It is recommended that you use the included script, ndn-iot-register, but you can manually set up routing on your nodes with the following
+steps.
+
+1. Ensure that the Raspberry Pi is connected to the network (wired or wireless) that will host your IoT network.
+
+2. Start the NDN forwarder and router by running
+        
+        nfd-start
+
+3. Tell the forwarder to route network traffic to the multicast face.
+ If you are using WiFi only with your Raspberry Pi, the multicast face will typically have faceid 2. Otherwise, 
+ you will need to use the 'nfd-status' command to determine the correct face to register. Run
+
+        nfd-status -f
+
+ and look for lines containing `remote=udp4://224.0.23.170:56363`. Find the faceid
+ that contains an IP address on the IoT network. For example, if your nodes are all on a WiFi network, and your
+ WiFi IP address is 192.168.16.7, you may find a line that reads
+
+        faceid=3 remote=udp4://224.0.23.170:56363 local=udp4://192.168.16.7:56356 ...
+
+ Now you can tell the forwarder to route traffic to that face. Run
+
+        nfdc-register / <faceid>
 
 
 Writing IoT Nodes
@@ -96,9 +111,39 @@ Writing IoT Nodes
 There are several classes provided as part of the Internet of Things toolkit for NDN. 
 #### IotNode
 
-Nodes in your network will generally be subclasses of IotNode. Besides adding methods for
-interest handling (see ['Edit command list'](#edit-command-list) above), the following
-methods may also be overridden:
+Nodes in your network will generally be subclasses of IotNode. 
+
+The most important method for customizing nodes is `addCommand`:
+
+```python
+    def addCommand(suffix, func, keywords, isSigned)
+```
+ This is used to register your custom interest handling methods. The parameters are:
+ - `suffix`: An NDN name that will be added to the node prefix to form the full command name.
+ - `func`: A function that is called whenever the node receives an interest matching the suffix. The
+    function must take an Interest object and return a Data object:
+
+     ```python
+         def handlerFunction(interest):
+             dataName = Name(interest.getName())
+             # ... do some processing based on the interest
+             # return a Data object or the interest will time out
+             response = Data(dataName)
+             response.setContent('Done')
+             return response
+     ```
+     Note that the sender of the interest will not receive your reply if the name of the data object does not match
+     the interest name. That is, you may append components to `dataName`, but not remove them. You may also return `None`,
+     which will cause the interest to time out.
+
+ - `keywords`: A list of strings. The controller groups together all commands that share a keyword, so that other nodes
+     can search for a particular capability, service, sensor type, etc. You are free to define as many keywords as you like,
+     and their meaning is mainly application-dependent.
+ - `isSigned`: By default, this is set to `False`. Setting this to `True` will allow only devices who are part of your network to
+     invoke the command, by signing their command interests.
+
+Besides adding methods for interest handling with `addCommand`, nodes can be further customizes by overriding the
+following methods:
 
 * setupComplete 
 ```python
@@ -134,30 +179,6 @@ Other useful methods are:
    Reads the Raspberry Pi serial number from /proc/cpuinfo. Useful if you need some 
 identifier to distinguish Raspberry Pis with the same node name.
 
-* addCommand
-```python
-    def addCommand(suffix, func, keywords, isSigned)
-```
-    This is used to register your custom interest handling methods. The parameters are:
-    - `suffix`: An NDN name that will be added to the node prefix to form the full command name.
-    - `func`: A function that is called whenever the node receives an interest matching the suffix. The
-       function must take an Interest object and return a Data object:
-        ```python
-            def handlerFunction(interest):
-                dataName = Name(interest.getName())
-                # ... do some processing based on the interest
-                # return a Data object or the interest will time out
-                response = Data(dataName)
-                response.setContent('Done')
-                return response
-        ```
-        Note that the sender of the interest will not receive your reply if the name of the data object does not match
-        the interest name. That is, you may append components to the interest name, but not remove them.
-     - `keywords`: A list of strings. The controller groups together all commands that share a keyword, so that other nodes
-         can search for a particular capability, service, sensor type, etc. You are free to define as many keywords as you like,
-         and their meaning is mainly application-dependent.
-     - `isSigned`: By default, this is set to `False`. Setting this to `True` will allow only devices who are part of your network to
-         invoke the command, by signing their command interests.
 ------
 
 The remaining classes do not need to be subclassed, and it is not recommended that you modify them

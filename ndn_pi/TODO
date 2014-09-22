@@ -1,10 +1,14 @@
 Version 1.0b
 ------------
-Rewrite the README, TUTORIAL and the examples (!)
+Add scripts that start NDN, and the controller 
+    ndn-iot-register
+    ndn-iot-controller
 
 Version 1.0
 -----------
 Remove console from controller, create separate utility that uses user keys
+
+Create a setup.py that installs the NDN configuration scripts
 
 Encrypt data
 
