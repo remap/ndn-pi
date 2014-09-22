@@ -27,9 +27,7 @@ from pyndn.security.policy import ConfigPolicyManager
 from pyndn.security.identity import IdentityManager
 from pyndn.security.security_exception import SecurityException
 
-from security.iot_identity_storage import IotIdentityStorage
-from security.iot_policy_manager import IotPolicyManager
-from security.iot_identity_manager import IotIdentityManager
+from ndn_pi.security import IotIdentityStorage,IotPolicyManager, IotIdentityManager
 
 from collections import namedtuple
 

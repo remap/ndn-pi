@@ -39,6 +39,8 @@ class LedNode(IotNode):
         self.addCommand(offCommand, self.onLightCommand, ['led', 'light'],
             False)
 
+        self.blinkPWM = None
+
     def onLightCommand(self, interest):
         self.log.debug("Light command")
         response = Data(interest.getName())
@@ -55,6 +57,18 @@ class LedNode(IotNode):
         except IndexError, RuntimeError:
             #malformed interest
             response.setContent('NACK')
+        return response
+
+    def onBlinkCommand(self, interest):
+        self.log.debug("Blink command")
+        response = Data(interest.getName())
+        if self.blinkPWM is None:
+            self.blinkPWM = GPIO.PWM(self.pinNumber, 2.0)
+            self.blinkPWM.start(50)
+        else:
+            self.blinkPWM.stop()
+            self.blinkPWM = None
+        response.setContent('ACK')
         return response
 
 if __name__ == '__main__':

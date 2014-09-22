@@ -8,20 +8,17 @@ import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
-from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
+from pyndn.security.security_exception import SecurityException
 
 from base_node import BaseNode, Command
 
-from commands.cert_request_pb2 import CertificateRequestMessage
-from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
-from commands.configure_device_pb2 import DeviceConfigurationMessage
+from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
+from security import HmacHelper
 
-from pyndn.security.security_exception import SecurityException
 
-from security.hmac_helper import HmacHelper
 
 from collections import defaultdict
 import json
@@ -401,6 +398,7 @@ class IotController(BaseNode):
 
 if __name__ == '__main__':
     import os
+    from pyndn.util.boost_info_parser import BoostInfoParser
     try:
         fileName = sys.argv[1]
     except IndexError:

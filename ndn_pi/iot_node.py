@@ -29,15 +29,11 @@ from pyndn.encoding import ProtobufTlv
 
 from base_node import BaseNode, Command
 
-from commands.cert_request_pb2 import CertificateRequestMessage
-from commands.update_capabilities_pb2 import UpdateCapabilitiesCommandMessage
-from commands.configure_device_pb2 import DeviceConfigurationMessage
+from ndn_pi.commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
+from ndn_pi.security import HmacHelper
 
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
-
-from security.hmac_helper import HmacHelper
-
 
 
 default_prefix = Name('/localhop/configure')
@@ -79,7 +75,7 @@ class IotNode(BaseNode):
 
     def beforeLoopStart(self):
         print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
-        self.tempPrefixId = self.face.registerPrefix(self.prefix, 
+        self.face.registerPrefix(self.prefix, 
             self._onConfigurationReceived, self.onRegisterFailed)
         print self.tempPrefixId
 
@@ -92,6 +88,7 @@ class IotNode(BaseNode):
 
     def _onConfigurationReceived(self, prefix, interest, transport, prefixId):
         # the interest we get here is signed by HMAC, let's verify it
+        self.tempPrefixId = prefixId # didn't get it from register because of the event loop
         dataName = Name(interest.getName())
         replyData = Data(dataName)
         if (self._hmacHandler.verifyInterest(interest)):
