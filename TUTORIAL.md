@@ -5,61 +5,56 @@ Tutorial
 =========
 
 This tutorial will walk you through configuring and running your own IoT network over NDN.
-Before following this tutorial, try running the led\_control example in <ndn-pi/examples>.
+Before following this tutorial, try running the 'led\_control' example in the examples folder.
 
-Copy the example folder to a new location so you can make changes.
+Copy the 'led\_control' folder to a new location so you can make changes.
  
 Extending the LED control example
 -------------------------------------
 
-### Adding an LED node
-The easiest way to extend the LED control network is to add another node that provides the
-same LED service. To do that, load the configuration file for the simple LED node using
+### Adding LEDs
+The easiest way to extend the LED control network is to add another node that provides the same type of service, controlling an LED. 
+You may attach an LED to a different pin (e.g. pin 17), or run another node controlling the same pin. You may add this new node to
+any Raspberry Pi in your network (including one already running an LED node).
 
-	    ndn-config led.conf
+To start the new node, run
 
-First, save the configuration to a new file, e.g. `led2.conf`, so that we don't override the
-original settings for the LED node. Then, change the device name using the first option, 
-'Edit network name settings'. You can choose any name you like. Once you are done editing the
-device information, ndn-config will create and save network certificates for the new node.
-You should not need to make any other changes to the configuration.    
+        sudo ./led_node.py [pin]
 
-Now you may run the new node, using
+with an optional pin number. If no pin number is given, 24 is assumed. After pairing the new node with the controller, enter 'D' 
+in the controller menu. You will see new entries for the new node you have registered. Try sending interests
+to turn the LED on and off.
 
-        sudo -E ./led_node.py led2.conf &
+Another way to extend the network is to add more LEDs to the multi-LED node. 
+Open 'led_multi_node.py' and add another pin to the pinList. Save and run the 
+new node with
 
-If you chose a different name for your new configuration, be sure to use that in place of `led2.conf`.    
+        sudo ./led_multi_node.py
 
-If you run the new node and the original LED node on the same Raspberry Pi, you will see two 
-entries in the viewer, but they will control the same LED. This 
-is because both nodes are set up to use the same pin. If you set up another Raspberry Pi with 
-an LED on pin 24, you will be able to control each LED separately.
-
-You could also duplicate the viewer node, in order to view and control available LEDs from
-another node.
-
+Now the controller directory should show three different pins available for control on the multi-LED node.
 
 ### Adding commands to existing nodes
 
-Another way to extend the network is to add more LEDs to the multi-LED node. Open
-the configuration for the multi-LED node with
+You can also add commands to the nodes to increase their capabilities. Open up 'led\_node.py'. You will see there is an 'onBlinkCommand' 
+method that is not currently used. This method toggles blinking on the controlled LED. To install this command,
+add the following to the end of the __init__ method:
 
-	    ndn-config led_multi.conf
+   ```python
+        blinkCommand = Name('toggleBlink')
+        self.addCommand(blinkCommand, self.onBlinkCommand, ['led', 'light'], False)
+   ```
 
-Go to 'Edit command list' and look at the two defined commands. They are in the form
+Now run the node and pair it with the controller as usual. You will now see the blink command
+in the directory. Try sending interests to turn blinking on and off.
 
-	    setLight/<pin number>
+### Requiring signed commands
 
-The multi-LED node contains logic that looks for pin numbers in commands on startup and
-when a command interest is received. You may move LEDs by changing the pin number at the end
-of the command, or add pins by adding a similar command. For example, to add an LED on pin 18,
-add a new command with the following fields:    
+The final change you can make to a node is to require signing for its commands. Signed commands 
+contain keys that can be used to determine the identity of the sender. To require signing, simply change the `False` at the end of the `addCommand` lines to `True`.
 
-	    Command name:  	setLight/18
-	    Function name: 	onLightCommand
-	    Keyword(s): led
+Now, when you run the node and pair with the controller, your commands will only be
+successful if you choose to sign them. To sign commands sent in source code, you must call
 
-Do not toggle signing/authorisation for now. Save the configuration file with the same name, and
-re-run led\_multi.py. Don't forget to run the controller and viewer nodes if they are not already 
-running.
+    self.face.makeCommandInterest(interest)
 
+just before expressing the interest.
