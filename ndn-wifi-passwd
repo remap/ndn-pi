@@ -1,0 +1,57 @@
+#!/bin/bash
+
+PASS1=""
+PASS_MATCH=0
+
+
+updatePasswd() {
+    newpass=$1
+    pass_success=0
+
+    tempdir=$(mktemp -dt) &&
+    sed -re "s/wpa_passphrase=.+/wpa_passphrase=$newpass/" /etc/hostapd/hostapd.conf > "$tempdir/hostapd.conf" &&
+    sed -re "/ssid=\"Raspi_NDN\"/,+5{s/psk=.+$/psk=\"$newpass\"/}"  /etc/wpa_supplicant/wpa_supplicant.conf > "$tempdir/wpa_supplicant.conf" &&
+    sudo cp /etc/hostapd/hostapd.conf /etc/hostapd/hostapd.conf.bak &&
+    sudo cp /etc/wpa_supplicant/wpa_supplicant.conf /etc/wpa_supplicant/wpa_supplicant.conf.bak &&
+    sudo mv "$tempdir/hostapd.conf" /etc/hostapd/hostapd.conf &&
+    sudo mv "$tempdir/wpa_supplicant.conf" /etc/wpa_supplicant/wpa_supplicant.conf &&
+    pass_success=1 &&
+    echo "Password updated."
+}
+
+while [ "$PASS_MATCH" -eq 0 ]; do
+    while [ -z "$PASS1" ]; do
+        read -r -s -p "Enter new wifi password: " PASS1
+    done
+    echo
+    read -r -s -p "Confirm new password: " PASS2
+    echo
+    echo
+    if [ "$PASS1" = "$PASS2" ]; then 
+        PASS_MATCH=1
+        updatePasswd $PASS1
+        if [ "$pass_success" -eq 0 ]; then
+            echo "Could not update configuration files"
+            exit 1
+        else
+            service hostapd status
+            if [[ $? -eq 0 ]]; then
+                echo "Restarting hostapd"
+                sudo service hostapd restart
+            else 
+                echo "Restarting wpa_supplicant"
+                sudo ifconfig wlan0 down
+                sudo dhclient -r wlan0
+                sudo killall wpa_supplicant
+                sudo wpa_supplicant -dd -iwlan0 -c /etc/wpa_supplicant/wpa_supplicant.conf 2>&1 | logger -t wpa_supplicant &
+                sudo ifconfig wlan0 up
+                sudo dhclient -1 wlan0
+            fi
+        fi
+    else 
+        echo "Passwords do not match."
+        PASS1=""
+    fi
+done
+
+

@@ -4,7 +4,7 @@ Named Data Network Internet of Things Toolkit (NDN-IoTT)
  Getting Started
 ---------------------------------
 
-The toolkit is pre-packaged as a [Raspberry Pi image](#image-download). The major components of this toolkit are:
+The major components of this kit are:
 -	PyNDN: a Python implementation of NDN
 -	nfd: the NDN Forwarding Daemon, which manages connections (faces)
 -   nrd: the NDN Routing Daemon, which routes interests and data 
@@ -18,14 +18,18 @@ There are other libraries included for further exploration of NDN:
 
 In order to communicate using NDN, all devices, Raspberry Pi or otherwise, must be
 connected to the same LAN. By default, Raspberry Pis are configured to create or join
-a WiFi network named 'Raspi\_NDN' if a wireless interface is available. Alternatively, you may
- connect your Raspberry Pis by Ethernet.    
+a WiFi network named 'Raspi\_NDN' if a wireless interface is available. 
+
+The default password for 'Raspi\_NDN' is 'defaultpasswd'. It can be changed with the ndn-wifi-passwd tool,
+or by modifying /etc/hostapd/hostapd.conf and /etc/wpa_supplicant/wpa_supplicant.conf.
+
+Alternatively, you may connect your Raspberry Pis by Ethernet.    
 
 ### Network Configuration
 
 If you are using multiple Raspberry Pis, they must all be connected to the same network, whether by WiFi 
 or Ethernet. This allows interests and data to be multicast to the other nodes over UDP. To set up multicast,
-you must register your network on an NDN multicast face.
+you must register your network an NDN multicast face.
 
 There is an installed script, ndn-iot-start, that will start the NDN forwarder and router if they are not 
 already running, and automatically route traffic from your nodes to the multicast face. It assumes that your 
@@ -51,15 +55,9 @@ There is one special node type, the controller. Each network must have a control
 are creating network certificates for all other nodes in the network, and maintaining a list of available 
 services. 
 
-The default configuration file for the controller (found at /home/pi/.ndn/controller.conf in the image)
-consists of just the network name and the controller name:
-
-	{
-		controllerName controller
-		environmentPrefix home
-	}
-
-To change controller settings, you may edit this file, or run the included ndn-iot-controller script:
+The configuration for the controller consists of just the network name (default is '/home') and the controller name
+(default is 'controller'). The default configuration file can be in /home/pi/.ndn/controller.conf. To change controller settings, you
+may edit this file, or run the included ndn-iot-controller script:
 
         ndn-iot-controller <network-name> <controller-name>
 
@@ -93,9 +91,8 @@ steps.
 
 1. Ensure that the Raspberry Pi is connected to the network (wired or wireless) that will host your IoT network.
 
-2. Restart the NDN forwarder and router by running
+2. Start the NDN forwarder and router by running
         
-        nfd-stop
         nfd-start
 
 3. Tell the forwarder to route network traffic to the multicast face.
@@ -110,7 +107,7 @@ steps.
 
         faceid=3 remote=udp4://224.0.23.170:56363 local=udp4://192.168.16.7:56356 ...
 
-4. Tell the forwarder to route traffic to the face you discovered in step 3.
+4. Tell the forwarder to route traffic to the face you discovered in *3*.
 
         nfdc-register / <faceid>
 
@@ -118,9 +115,9 @@ steps.
 Writing IoT Nodes
 ----------------
 
+
 ### Provided Classes
 There are several classes provided as part of the Internet of Things toolkit for NDN. 
-
 #### IotNode
 
 Nodes in your network will generally be subclasses of IotNode. 
@@ -216,7 +213,3 @@ NDN Resources
 * [ndn-cxx wiki](http://redmine.named-data.net/projects/ndn-cxx/wiki) for security information
 * [NFD wiki](http://redmine.named-data.net/projects/nfd/wiki) for more on the internals of NDN packets and forwarding
 
-Image Download
----------------
-
-The most recent version of the Raspberry Pi image can be [downloaded here](http://memoria.ndn.ucla.edu/IOT/ndn_iot_v1.0b.img).
