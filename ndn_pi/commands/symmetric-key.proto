@@ -1,0 +1,8 @@
+message SymmetricKeyRequestMessage {
+    message SymmetricKeyRequest {
+        required uint32 notBefore = 235;
+        required uint32 notAfter = 236;
+        required bytes keyBits = 237;
+    }
+    required SymmetricKeyRequest request = 238;
+}

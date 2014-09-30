@@ -7,7 +7,7 @@ import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
-from pyndn.security import KeyChain, KeyType
+from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
@@ -15,16 +15,12 @@ from pyndn.security.security_exception import SecurityException
 from base_node import BaseNode, Command
 
 from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
-from security import HmacHelper, IotUserKeyStorage
+from security import HmacHelper
 
 
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 import json
-from getpass import getpass
-
-
-UserCredentials = namedtuple('UserCredentials', ['username', 'key'])
 
 try:
     import asyncio
@@ -54,9 +50,6 @@ class IotController(BaseNode):
         self.deviceSuffix = Name(nodeName)
         self.networkPrefix = Name(networkName)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
-
-        #user key management
-        self._userKeyStorage = IotUserKeyStorage()
 
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
         self._policyManager.setTrustRootIdentity(self.prefix)
@@ -312,84 +305,9 @@ class IotController(BaseNode):
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
-        if not(self._userKeyStorage.hasAnyUsers()):
-            self.loop.call_soon(self.createFirstUser)
-        else:
-            self.loop.call_soon(self.doUserLogin)
-
-    def doUserLogin(self):
-        userName=''
-        password=''
-        try:
-            while len(password) == 0:
-                while len(userName) == 0:
-                    userName = input('User name: ')
-                password = getpass('Password: ')
-            userIdentity = Name(self.networkPrefix).append('user').append(userName)
-            userKey = self._userKeyStorage.getUserKey(userIdentity, password)
-            if userKey.toRawStr() is None:
-                print('Incorrect user name or password.\n')
-                self.loop.call_soon(self.doUserLogin)
-            else:
-                self._currentUser = UserCredentials(userIdentity.toUri(), userKey)
-                self.loop.call_soon(self.beginInputLoop)
-            
-        except KeyboardInterrupt: 
-            print('Cannot run without user account.')
-            self.stop()
-
-    def beginInputLoop(self):
         # begin taking add requests
         self.loop.call_soon(self.displayMenu)
         self.loop.add_reader(stdin, self.handleUserInput) 
-
-    def createFirstUser(self):
-        greeting = "It looks like this is the first time you are running the "
-        greeting +="NDN-IoT controller. Please create a user name and password "
-        greeting +="for configuring the network.\n"
-
-        print(greeting)
-        created = self.createUser()
-        if not created:
-            print('Cannot run without user account.')
-            self.stop()
-        else:
-            self.beginInputLoop()
-
-    def createUser(self):
-        created = False
-        try:
-            userName = ''
-            while len(userName) == 0:
-                userName = input('User name: ')
-            while True: 
-                userPass = getpass('Password: ')
-                while len(userPass) == 0:
-                    print('You must enter a password.\n')
-                    userPass = getpass('Password: ')
-                passMatch = getpass('Confirm password: ')
-                if userPass != passMatch:
-                    userPass = ''
-                    userName = ''
-                    print('Passwords do not match!')
-                else:
-                    break
-        except KeyboardInterrupt:
-            print('User creation aborted')
-        else:
-            userIdentity = Name(self.networkPrefix).append('user').append(userName)
-            userKeyName = self._identityStorage.getNewKeyName(userIdentity, True)
-            
-            print('Generating network credentials...')
-            publicKey, privateKey = self._identityManager._getNewKeyBits(2048)
-            import pdb; pdb.set_trace()
-            self._identityStorage.addKey(userKeyName, KeyType.RSA, publicKey)
-            self._userKeyStorage.saveUserKey(userIdentity, privateKey, userPass)
-
-            print('Done! Logged in as {}'.format(userName))
-            created = True
-        return created
-        
 
     def displayMenu(self):
         menuStr = "\n"
