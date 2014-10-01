@@ -7,7 +7,7 @@ import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
-from pyndn.security import KeyChain
+from pyndn.security import KeyChain, KeyType
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
@@ -15,12 +15,16 @@ from pyndn.security.security_exception import SecurityException
 from base_node import BaseNode, Command
 
 from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
-from security import HmacHelper
+from security import HmacHelper, IotUserKeyStorage
 
 
 
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 import json
+from getpass import getpass
+
+
+UserCredentials = namedtuple('UserCredentials', ['username', 'key'])
 
 try:
     import asyncio
@@ -50,6 +54,9 @@ class IotController(BaseNode):
         self.deviceSuffix = Name(nodeName)
         self.networkPrefix = Name(networkName)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+
+        #user key management
+        self._userKeyStorage = IotUserKeyStorage()
 
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
         self._policyManager.setTrustRootIdentity(self.prefix)
@@ -305,7 +312,162 @@ class IotController(BaseNode):
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
-        self.log.info('Controller is ready')
+        if not(self._userKeyStorage.hasAnyUsers()):
+            self.loop.call_soon(self.createFirstUser)
+        else:
+            self.loop.call_soon(self.doUserLogin)
+
+    def doUserLogin(self):
+        userName=''
+        password=''
+        try:
+            while len(password) == 0:
+                while len(userName) == 0:
+                    userName = input('User name: ')
+                password = getpass('Password: ')
+            userIdentity = Name(self.networkPrefix).append('user').append(userName)
+            userKey = self._userKeyStorage.getUserKey(userIdentity, password)
+            if userKey.toRawStr() is None:
+                print('Incorrect user name or password.\n')
+                self.loop.call_soon(self.doUserLogin)
+            else:
+                self._currentUser = UserCredentials(userIdentity.toUri(), userKey)
+                self.loop.call_soon(self.beginInputLoop)
+            
+        except KeyboardInterrupt: 
+            print('Cannot run without user account.')
+            self.stop()
+
+    def beginInputLoop(self):
+        # begin taking add requests
+        self.loop.call_soon(self.displayMenu)
+        self.loop.add_reader(stdin, self.handleUserInput) 
+
+    def createFirstUser(self):
+        greeting = "It looks like this is the first time you are running the "
+        greeting +="NDN-IoT controller. Please create a user name and password "
+        greeting +="for configuring the network.\n"
+
+        print(greeting)
+        created = self.createUser()
+        if not created:
+            print('Cannot run without user account.')
+            self.stop()
+        else:
+            self.beginInputLoop()
+
+    def createUser(self):
+        created = False
+        try:
+            userName = ''
+            while len(userName) == 0:
+                userName = input('User name: ')
+            while True: 
+                userPass = getpass('Password: ')
+                while len(userPass) == 0:
+                    print('You must enter a password.\n')
+                    userPass = getpass('Password: ')
+                passMatch = getpass('Confirm password: ')
+                if userPass != passMatch:
+                    userPass = ''
+                    userName = ''
+                    print('Passwords do not match!')
+                else:
+                    break
+        except KeyboardInterrupt:
+            print('User creation aborted')
+        else:
+            userIdentity = Name(self.networkPrefix).append('user').append(userName)
+            userKeyName = self._identityStorage.getNewKeyName(userIdentity, True)
+            
+            print('Generating network credentials...')
+            publicKey, privateKey = self._identityManager._getNewKeyBits(2048)
+            import pdb; pdb.set_trace()
+            self._identityStorage.addKey(userKeyName, KeyType.RSA, publicKey)
+            self._userKeyStorage.saveUserKey(userIdentity, privateKey, userPass)
+
+            print('Done! Logged in as {}'.format(userName))
+            created = True
+        return created
+        
+
+    def displayMenu(self):
+        menuStr = "\n"
+        menuStr += "P)air a new device with serial and PIN\n"
+        menuStr += "D)irectory listing\n"
+        menuStr += "E)xpress an interest\n"
+        menuStr += "Q)uit\n"
+
+        print(menuStr)
+        print ("> ", end="")
+        stdout.flush()
+
+    def listDevices(self):
+        menuStr = ''
+        for capability, commands in self._directory.items():
+            menuStr += '{}:\n'.format(capability)
+            for info in commands:
+                signingStr = 'signed' if info['signed'] else 'unsigned'
+                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
+        print(menuStr)
+        self.loop.call_soon(self.displayMenu)
+
+    def onInterestTimeout(self, interest):
+        print('Interest timed out: {}'.interest.getName().toUri())
+
+    def onDataReceived(self, interest, data):
+        print('Received data named: {}'.format(data.getName().toUri()))
+        print('Contents:\n{}'.format(data.getContent().toRawStr()))
+    
+    def expressInterest(self):
+        try:
+            interestName = input('Interest name: ')
+            if len(interestName):
+                toSign = input('Signed? (y/N): ').upper().startswith('Y')
+                interest = Interest(Name(interestName))
+                interest.setInterestLifetimeMilliseconds(5000)
+                interest.setChildSelector(1)
+                if (toSign):
+                    self.face.makeCommandInterest(interest) 
+                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
+            else:
+                print("Aborted")
+        except KeyboardInterrupt:
+                print("Aborted")
+        finally:
+                self.loop.call_soon(self.displayMenu)
+
+    def beginPairing(self):
+        try:
+            deviceSerial = input('Device serial: ') 
+            devicePin = input('PIN: ')
+            deviceSuffix = input('Node name: ')
+        except KeyboardInterrupt:
+               print('Pairing attempt aborted')
+        else:
+            if len(deviceSerial) and len(devicePin) and len(deviceSuffix):
+                self._addDeviceToNetwork(deviceSerial, Name(deviceSuffix), 
+                    devicePin.decode('hex'))
+            else:
+               print('Pairing attempt aborted')
+        finally:
+            self.loop.call_soon(self.displayMenu)
+
+    def handleUserInput(self):
+        inputStr = stdin.readline().upper()
+        if inputStr.startswith('D'):
+            self.listDevices()
+        elif inputStr.startswith('P'):
+            self.beginPairing()
+        elif inputStr.startswith('E'):
+            self.expressInterest()
+        elif inputStr.startswith('Q'):
+            self.stop()
+        else:
+            self.loop.call_soon(self.displayMenu)
+            
+        
+>>>>>>> origin/userEncryption
 
 if __name__ == '__main__':
     import os

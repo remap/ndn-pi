@@ -107,7 +107,7 @@ class IotNode(BaseNode):
 
             self.deviceSuffix = self._extractNameFromField(environmentConfig.configuration.deviceSuffix)
 
-            self._configureIdentity = Name(networkPrefix).append(self.deviceSuffix) 
+            self._configureIdentity = Name(networkPrefix).append('device').append(self.deviceSuffix) 
             self._sendCertificateRequest(self._configureIdentity)
         #else, ignore!
             
@@ -133,42 +133,22 @@ class IotNode(BaseNode):
         can sign us a certificate that can be used with other nodes in the network.
         """
 
-        #TODO: GENERATE A NEW PUBLIC/PRIVATE PAIR INSTEAD OF COPYING
-        makeKey = False
         try:
-            defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(keyIdentity)
-            newKeyName = defaultKey
+            self.log.debug("Found existing key")
+            keyName = self._identityStorage.getDefaultKeyNameForIdentity(keyIdentity)
         except SecurityException:
-            defaultIdentity = self._keyChain.getDefaultIdentity()
-            defaultKey = self._identityStorage.getDefaultKeyNameForIdentity(defaultIdentity)
-            newKeyName = self._identityStorage.getNewKeyName(keyIdentity, True)
-            makeKey = True
-             
-        self.log.debug("Found key: " + defaultKey.toUri()+ " renaming as: " + newKeyName.toUri())
+            self.log.info("Generating new device key...")
+            keyName = self._identityManager.generateRSAKeyPairAsDefault(keyIdentity, True)
 
-        keyType = self._identityStorage.getKeyType(defaultKey)
-        keyDer = self._identityStorage.getKey(defaultKey)
-
-        if makeKey:
-            try:
-                privateDer = self._identityManager.getPrivateKey(defaultKey)
-            except SecurityException:
-                # XXX: is recovery impossible?
-                pass
-            else:
-                try:
-                    self._identityStorage.addKey(newKeyName, keyType, keyDer)
-                    self._identityManager.addPrivateKey(newKeyName, privateDer)
-                except SecurityException:
-                    # TODO: key shouldn't exist...
-                    pass
+        keyType = self._identityStorage.getKeyType(keyName)
+        keyDer = self._identityStorage.getKey(keyName)
 
         message = CertificateRequestMessage()
         message.command.keyType = keyType
         message.command.keyBits = keyDer.toRawStr()
 
         for component in range(newKeyName.size()):
-            message.command.keyName.components.append(newKeyName.get(component).toEscapedString())
+            message.command.keyName.components.append(keyName.get(component).toEscapedString())
 
         paramComponent = ProtobufTlv.encode(message)
 
@@ -223,8 +203,6 @@ class IotNode(BaseNode):
                 # TODO: limit number of tries, then revert trust root + network prefix
                 # reset salt, create new Hmac key
                 self.face.expressInterest(rootCertName, onRootCertificateDownload, onRootCertificateTimeout)
-
-            self.face.expressInterest(rootCertName, onRootCertificateDownload, onRootCertificateTimeout)
 
         except Exception as e:
             self.log.exception("Could not import new certificate", exc_info=True)

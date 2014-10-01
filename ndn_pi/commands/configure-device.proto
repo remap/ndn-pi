@@ -3,9 +3,9 @@ message DeviceConfigurationMessage {
 		repeated bytes components = 8;
 	}
     message DeviceConfiguration {
-        required Name networkPrefix = 226;
-        required Name controllerName = 227;
-        required Name deviceSuffix = 228;
+        required Name networkPrefix = 231;
+        required Name controllerName = 232;
+        required Name deviceSuffix = 233;
     }
-	required DeviceConfiguration configuration = 229;
+	required DeviceConfiguration configuration = 234;
 }
