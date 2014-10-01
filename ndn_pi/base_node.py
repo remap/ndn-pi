@@ -20,6 +20,8 @@
 import logging
 import time
 import sys
+import random
+import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.security import KeyChain
@@ -53,7 +55,6 @@ class BaseNode(object):
         self._identityManager = IotIdentityManager(self._identityStorage)
         self._policyManager = IotPolicyManager(self._identityStorage)
 
-        # hopefully there is some private/public key pair available
         self._keyChain = KeyChain(self._identityManager, self._policyManager)
 
         self._registrationFailures = 0
@@ -61,6 +62,17 @@ class BaseNode(object):
 
         self._setupComplete = False
 
+        self.configurationPrefix = Name('/localhop/configure')
+        self.discoveryPrefix  Name('/localhop/ping')
+
+        # append something to the serial so it doesn't collide with other nodes 
+        # on the same physical device 
+        random.seed(time.time())
+        serialPrefix=struct.pack(">L",random.randint(0, 0xffff)).encode('hex')
+        self._instanceSerial = serialPrefix+"-"+self.getDeviceSerial()
+
+    def getSerial(self):
+        return self._instanceSerial
 
 ##
 # Logging
@@ -98,6 +110,14 @@ class BaseNode(object):
         Called before the event loop starts.
         """
         pass
+
+    def discoveryResponse(self):
+        """
+            Called when someone sends an interest to /configure without any 
+            further components, and an exclude that does not match the device
+            serial.
+        """
+        
 
     def getDefaultCertificateName(self):
         try:
@@ -183,8 +203,8 @@ class BaseNode(object):
         """
         self.log.info("Received invalid" + dataOrInterest.getName().toUri())
 
-    @staticmethod
-    def getSerial():
+    @classmethod
+    def getDeviceSerial(cls):
         """
         Find and return the serial number of the Raspberry Pi. Provided in case
         you wish to distinguish data from nodes with the same name by serial.

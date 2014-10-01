@@ -35,7 +35,7 @@ from ndn_pi.security import HmacHelper
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
 
-default_prefix = Name('/localhop/configure')
+configurePrefix = Name('/localhop/configure')
 
 try:
     import asyncio
@@ -59,7 +59,7 @@ class IotNode(BaseNode):
         
         self.deviceSerial = self.getSerial()
 
-        self.prefix = Name(default_prefix).append(self.deviceSerial)
+        self.prefix = Name(configurePrefix).append(self.deviceSerial)
 
         self._certificateTimeouts = 0
 

@@ -33,19 +33,13 @@ try:
 except NameError:
     pass
 
-class IotController(BaseNode):
+class IotConsole(BaseNode):
     """
-    The controller class has a few built-in commands:
-        - listDevices: return the names and capabilities of all attached devices
-        - certificateRequest: takes public key information and returns name of
-            new certificate
-        - updateCapabilities: should be sent periodically from IotNodes to update their
-           command lists
-        - addDevice: add a device based on HMAC
-    It is unlikely that you will need to subclass this.
+        This is the point of user interaction: you can pair devices, request a listing of
+        paired and unpaired devices, and express interests manually.
     """
     def __init__(self, nodeName, networkName):
-        super(IotController, self).__init__()
+        super(IotConsole, self).__init__()
         
         self.deviceSuffix = Name(nodeName)
         self.networkPrefix = Name(networkName)
@@ -107,7 +101,7 @@ class IotController(BaseNode):
                 component = source.get(i)
                 dest.components.append(component.getValue().toRawStr())
 
-        interestName = Name(self.configurationPrefix).append(Name(deviceSerial))
+        interestName = Name('/localhop/configure').append(Name(deviceSerial))
         encodedParams = ProtobufTlv.encode(d)
         interestName.append(encodedParams)
         interest = Interest(interestName)
@@ -305,7 +299,86 @@ class IotController(BaseNode):
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
-        self.log.info('Controller is ready')
+        # begin taking add requests
+        self.loop.call_soon(self.displayMenu)
+        self.loop.add_reader(stdin, self.handleUserInput) 
+
+    def displayMenu(self):
+        menuStr = "\n"
+        menuStr += "P)air a new device with serial and PIN\n"
+        menuStr += "D)irectory listing\n"
+        menuStr += "E)xpress an interest\n"
+        menuStr += "Q)uit\n"
+
+        print(menuStr)
+        print ("> ", end="")
+        stdout.flush()
+
+    def listDevices(self):
+        menuStr = ''
+        for capability, commands in self._directory.items():
+            menuStr += '{}:\n'.format(capability)
+            for info in commands:
+                signingStr = 'signed' if info['signed'] else 'unsigned'
+                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
+        print(menuStr)
+        self.loop.call_soon(self.displayMenu)
+
+    def onInterestTimeout(self, interest):
+        print('Interest timed out: {}'.interest.getName().toUri())
+
+    def onDataReceived(self, interest, data):
+        print('Received data named: {}'.format(data.getName().toUri()))
+        print('Contents:\n{}'.format(data.getContent().toRawStr()))
+    
+    def expressInterest(self):
+        try:
+            interestName = input('Interest name: ')
+            if len(interestName):
+                toSign = input('Signed? (y/N): ').upper().startswith('Y')
+                interest = Interest(Name(interestName))
+                interest.setInterestLifetimeMilliseconds(5000)
+                interest.setChildSelector(1)
+                if (toSign):
+                    self.face.makeCommandInterest(interest) 
+                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
+            else:
+                print("Aborted")
+        except KeyboardInterrupt:
+                print("Aborted")
+        finally:
+                self.loop.call_soon(self.displayMenu)
+
+    def beginPairing(self):
+        try:
+            deviceSerial = input('Device serial: ') 
+            devicePin = input('PIN: ')
+            deviceSuffix = input('Node name: ')
+        except KeyboardInterrupt:
+               print('Pairing attempt aborted')
+        else:
+            if len(deviceSerial) and len(devicePin) and len(deviceSuffix):
+                self._addDeviceToNetwork(deviceSerial, Name(deviceSuffix), 
+                    devicePin.decode('hex'))
+            else:
+               print('Pairing attempt aborted')
+        finally:
+            self.loop.call_soon(self.displayMenu)
+
+    def handleUserInput(self):
+        inputStr = stdin.readline().upper()
+        if inputStr.startswith('D'):
+            self.listDevices()
+        elif inputStr.startswith('P'):
+            self.beginPairing()
+        elif inputStr.startswith('E'):
+            self.expressInterest()
+        elif inputStr.startswith('Q'):
+            self.stop()
+        else:
+            self.loop.call_soon(self.displayMenu)
+            
+        
 
 if __name__ == '__main__':
     import os
