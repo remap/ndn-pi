@@ -7,7 +7,7 @@ import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
-from pyndn.security import KeyChain, KeyType
+from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
@@ -15,16 +15,12 @@ from pyndn.security.security_exception import SecurityException
 from base_node import BaseNode, Command
 
 from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
-from security import HmacHelper, IotUserKeyStorage
+from security import HmacHelper
 
 
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict
 import json
-from getpass import getpass
-
-
-UserCredentials = namedtuple('UserCredentials', ['username', 'key'])
 
 try:
     import asyncio
@@ -55,9 +51,6 @@ class IotController(BaseNode):
         self.networkPrefix = Name(networkName)
         self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
 
-        #user key management
-        self._userKeyStorage = IotUserKeyStorage()
-
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
         self._policyManager.setTrustRootIdentity(self.prefix)
         self._policyManager.setDeviceIdentity(self.prefix)
@@ -73,9 +66,10 @@ class IotController(BaseNode):
         # our capabilities
         self._baseDirectory = {}
 
-        # add the built-ins
+        # display the list command
+        # TODO: should probably be 'listCommands'
+        # 'listDevices' should show identity-serial mappings
         self._insertIntoCapabilities('listDevices', 'directory', False)
-        self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
 
         self._directory.update(self._baseDirectory)
 
@@ -114,7 +108,7 @@ class IotController(BaseNode):
                 component = source.get(i)
                 dest.components.append(component.getValue().toRawStr())
 
-        interestName = Name(self.configurationPrefix).append(Name(deviceSerial))
+        interestName = Name('/localhop/configure').append(Name(deviceSerial))
         encodedParams = ProtobufTlv.encode(d)
         interestName.append(encodedParams)
         interest = Interest(interestName)
@@ -141,45 +135,60 @@ class IotController(BaseNode):
 ######
 # Certificate signing
 ######
+    
 
     def _handleCertificateRequest(self, interest, transport):
         """
         Extracts a public key name and key bits from a command interest name 
         component. Generates a certificate if the request is verifiable.
 
-        This expects an HMAC signed interest.
+        This takes either RSA signed or HMAC'ed requests
         """
-        message = CertificateRequestMessage()
-        commandParamsTlv = interest.getName().get(self.prefix.size()+1)
-        ProtobufTlv.decode(message, commandParamsTlv.getValue())
-
         signature = HmacHelper.extractInterestSignature(interest)
-        deviceSerial = str(signature.getKeyLocator().getKeyName().get(-1).getValue())
+        signatureName = signature.getKeyLocator().getKeyName()
+        
+        def _onVerifiedCertRequest(interest, hmacSigner=None):
+            # the interest parameter is needed for compatibility
+            # with PyNDN's verification callback
+            message = CertificateRequestMessage()
+            commandParamsTlv = interest.getName()[self.prefix.size()+1]
+            ProtobufTlv.decode(message, commandParamsTlv.getValue())
 
-        response = Data(interest.getName())
-        certData = None
-        hmac = None
-        try:
-            hmac = self._hmacDevices[deviceSerial]
-            if hmac.verifyInterest(interest):
+            response = Data(interest.getName())
+            certData = None
+            try:
                 certData = self._createCertificateFromRequest(message)
-                # remove this hmac; another request will require a new pin
-                self._hmacDevices.pop(deviceSerial)
-        except KeyError:
-            self.log.warn('Received certificate request for device with no registered key')
-        except SecurityException:
-            self.log.warn('Could not create device certificate')
-        else:
-            self.log.info('Creating certificate for device {}'.format(deviceSerial))
+            except SecurityException:
+                self.log.warn('Could not create device certificate')
+            else:
+                self.log.info('Creating certificate for device {}'.format(signatureName.toUri()))
 
-        if certData is not None:
-            response.setContent(certData.wireEncode())
-            response.getMetaInfo().setFreshnessPeriod(10000) # should be good even longer
+            if certData is not None:
+                response.setContent(certData.wireEncode())
+                response.getMetaInfo().setFreshnessPeriod(10000) # should be good even longer
+            else:
+                response.setContent("Denied")
+
+            doKeySign = hmacSigner is None
+            if not doKeySign:
+                hmacSigner.signData(response)
+            self.sendData(response, transport, doKeySign)
+
+
+        if signatureName[0].toEscapedString() == 'localhop':
+            deviceSerial = str(signatureName.get(-1).getValue())
+            hmac = None
+            try:
+                hmac = self._hmacDevices[deviceSerial]
+                if hmac.verifyInterest(interest):
+                    # remove this hmac; another request will require a new pin
+                    self._hmacDevices.pop(deviceSerial)
+                    _onVerifiedCertRequest(interest, hmac)
+            except KeyError:
+                self.log.warn('Received certificate request for device with no registered key')
         else:
-            response.setContent("Denied")
-        if hmac is not None:
-            hmac.signData(response)
-        self.sendData(response, transport, False)
+            self._keyChain.verifyInterest(interest, _onVerifiedCertRequest, self.verificationFailed)
+
 
     def _createCertificateFromRequest(self, message):
         """
@@ -193,7 +202,7 @@ class IotController(BaseNode):
 
         self.log.debug("Key name: " + keyName.toUri())
 
-        if not self._policyManager.getEnvironmentPrefix().match(keyName):
+        if not self.networkPrefix.match(keyName):
             # we do not issue certs for keys outside of our network
             return None
 
@@ -299,6 +308,7 @@ class IotController(BaseNode):
             # needs to be signed!
             self.log.debug("Received capabilities update")
             def onVerifiedCapabilities(interest):
+                #TODO: delay ACK until we've checked the validity
                 response = Data(interest.getName())
                 response.setContent(str(time.time()))
                 self.sendData(response, transport)
@@ -312,84 +322,9 @@ class IotController(BaseNode):
             transport.send(response.wireEncode().buf())
 
     def onStartup(self):
-        if not(self._userKeyStorage.hasAnyUsers()):
-            self.loop.call_soon(self.createFirstUser)
-        else:
-            self.loop.call_soon(self.doUserLogin)
-
-    def doUserLogin(self):
-        userName=''
-        password=''
-        try:
-            while len(password) == 0:
-                while len(userName) == 0:
-                    userName = input('User name: ')
-                password = getpass('Password: ')
-            userIdentity = Name(self.networkPrefix).append('user').append(userName)
-            userKey = self._userKeyStorage.getUserKey(userIdentity, password)
-            if userKey.toRawStr() is None:
-                print('Incorrect user name or password.\n')
-                self.loop.call_soon(self.doUserLogin)
-            else:
-                self._currentUser = UserCredentials(userIdentity.toUri(), userKey)
-                self.loop.call_soon(self.beginInputLoop)
-            
-        except KeyboardInterrupt: 
-            print('Cannot run without user account.')
-            self.stop()
-
-    def beginInputLoop(self):
-        # begin taking add requests
-        self.loop.call_soon(self.displayMenu)
-        self.loop.add_reader(stdin, self.handleUserInput) 
-
-    def createFirstUser(self):
-        greeting = "It looks like this is the first time you are running the "
-        greeting +="NDN-IoT controller. Please create a user name and password "
-        greeting +="for configuring the network.\n"
-
-        print(greeting)
-        created = self.createUser()
-        if not created:
-            print('Cannot run without user account.')
-            self.stop()
-        else:
-            self.beginInputLoop()
-
-    def createUser(self):
-        created = False
-        try:
-            userName = ''
-            while len(userName) == 0:
-                userName = input('User name: ')
-            while True: 
-                userPass = getpass('Password: ')
-                while len(userPass) == 0:
-                    print('You must enter a password.\n')
-                    userPass = getpass('Password: ')
-                passMatch = getpass('Confirm password: ')
-                if userPass != passMatch:
-                    userPass = ''
-                    userName = ''
-                    print('Passwords do not match!')
-                else:
-                    break
-        except KeyboardInterrupt:
-            print('User creation aborted')
-        else:
-            userIdentity = Name(self.networkPrefix).append('user').append(userName)
-            userKeyName = self._identityStorage.getNewKeyName(userIdentity, True)
-            
-            print('Generating network credentials...')
-            publicKey, privateKey = self._identityManager._getNewKeyBits(2048)
-            import pdb; pdb.set_trace()
-            self._identityStorage.addKey(userKeyName, KeyType.RSA, publicKey)
-            self._userKeyStorage.saveUserKey(userIdentity, privateKey, userPass)
-
-            print('Done! Logged in as {}'.format(userName))
-            created = True
-        return created
-        
+        self.log.info('Controller is ready')
+        #self.loop.call_soon(self.displayMenu)
+        #self.loop.add_reader(stdin, self.handleUserInput) 
 
     def displayMenu(self):
         menuStr = "\n"
@@ -466,30 +401,3 @@ class IotController(BaseNode):
         else:
             self.loop.call_soon(self.displayMenu)
             
-        
->>>>>>> origin/userEncryption
-
-if __name__ == '__main__':
-    import os
-    import sys
-
-    nArgs = len(sys.argv) - 1
-    if nArgs == 0:
-        from pyndn.util.boost_info_parser import BoostInfoParser
-        fileName = os.path.expanduser('~/.ndn/iot_controller.conf')
-    
-        config = BoostInfoParser()
-        config.read(fileName)
-        deviceName = config["device/controllerName"][0].value
-        networkName = config["device/environmentPrefix"][0].value
-    elif nArgs == 2:
-        networkName = sys.argv[1]
-        deviceName = sys.argv[2]
-    else:
-        print('Usage: {} [network-name controller-name]'.format(sys.argv[0]))
-        sys.exit(1)
-
-    deviceSuffix = Name(deviceName)
-    networkPrefix = Name(networkName)
-    n = IotController(deviceSuffix, networkPrefix)
-    n.start()

@@ -147,7 +147,7 @@ class IotNode(BaseNode):
         message.command.keyType = keyType
         message.command.keyBits = keyDer.toRawStr()
 
-        for component in range(newKeyName.size()):
+        for component in range(keyName.size()):
             message.command.keyName.components.append(keyName.get(component).toEscapedString())
 
         paramComponent = ProtobufTlv.encode(message)
@@ -203,6 +203,8 @@ class IotNode(BaseNode):
                 # TODO: limit number of tries, then revert trust root + network prefix
                 # reset salt, create new Hmac key
                 self.face.expressInterest(rootCertName, onRootCertificateDownload, onRootCertificateTimeout)
+
+            self.face.expressInterest(rootCertName, onRootCertificateDownload, onRootCertificateTimeout)
 
         except Exception as e:
             self.log.exception("Could not import new certificate", exc_info=True)

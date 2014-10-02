@@ -63,7 +63,7 @@ class BaseNode(object):
         self._setupComplete = False
 
         self.configurationPrefix = Name('/localhop/configure')
-        self.discoveryPrefix  Name('/localhop/ping')
+        self.discoveryPrefix =  Name('/localhop/ping')
 
         # append something to the serial so it doesn't collide with other nodes 
         # on the same physical device 
