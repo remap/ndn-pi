@@ -46,7 +46,7 @@ class HmacHelper(object):
         random = SystemRandom()
         for i in range(8):
             pin[i] = random.randint(0,0xff)
-        return str(pin).encode('hex')
+        return pin
     
     @classmethod
     def extractInterestSignature(cls, interest, wireFormat=None):

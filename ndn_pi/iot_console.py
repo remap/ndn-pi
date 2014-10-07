@@ -1,22 +1,43 @@
+# -*- Mode:python; c-file-style:"gnu"; indent-tabs-mode:nil -*- */
+#
+# Copyright (C) 2014 Regents of the University of California.
+# Author: Adeola Bannis <thecodemaiden@gmail.com>
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Lesser General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program.  If not, see <http://www.gnu.org/licenses/>.
+# A copy of the GNU General Public License is in the file COPYING.
 from __future__ import print_function
 
 import logging
 import time
 import struct
 
-from pyndn import Name, Interest, Data, ThreadsafeFace
+from pyndn import Name, Interest, Data, ThreadsafeFace, Exclude
 from pyndn.util import Blob
 from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate
 from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
 
-from commands import CertificateRequestMessage
-from security import IotIdentityStorage, IotIdentityManager, IotUserKeyStorage, IotPolicyManager
+from console_tasks import *
+
+from commands import CertificateRequestMessage, DeviceConfigurationMessage
+from security import IotPolicyManager, IotIdentityStorage, IotIdentityManager, HmacHelper
 
 from dialog import Dialog
+import threading
 
-from collections import namedtuple
+from collections import namedtuple, deque
 import json
 
 # more Python 2+3 compatibility
@@ -30,76 +51,61 @@ try:
 except NameError:
     pass
 
-UserCredentials = namedtuple('UserCredentials', 'identity keyKey')
+#todo - make a true (X, Windows, OS X) GUI
+
 
 class IotConsole(object):
     """
-        This is the point of user interaction: you can pair devices, request a listing of
-        paired and unpaired devices, and express interests manually.
+    This is the point of user interaction: you can pair devices, request a
+    listing of unpaired devices or of available commands,  and express 
+    interests manually.
     """
     def __init__(self):
         super(IotConsole, self).__init__()
         self._identityStorage = IotIdentityStorage()
-        self._identityManager = IotIdentityManager(self._identityStorage)
+        self._identityManager = IotIdentityManager()
         self._policyManager = IotPolicyManager(self._identityStorage)
-        self._userKeyStorage = IotUserKeyStorage()
 
         self._keyChain = KeyChain(self._identityManager, self._policyManager)
-        self.controllerName = None
         self.networkPrefix = None
         self.currentUser = None
 
+        # serial numbers of waiting gateways
+        self._waitingGateways = []
+
+
         self.ui = Dialog(backtitle='NDN IoT User Console', height=18, width=78)
         self._prepareLogging()
-        
-    def chooseGateway(self):
-        controllerName = ''
+
+    def chooseNetwork(self):
         networkName = ''
         while True:
-            fields = [Dialog.FormField('Network prefix', networkName),
-                      Dialog.FormField('Controller name', controllerName)]
-
-            (retCode, retList) = self.ui.form('Connect to controller', fields)
+            (retCode, retVal) = self.ui.prompt('Network name')
             if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
                 break
-            networkName = retList[0]
-            controllerName = retList[1]
+            networkName = retVal
             
-            if len(networkName) == 0 or len(controllerName) == 0:
-                self.ui.alert('Please fill in all forms')
+            if len(networkName) == 0:
+                self.ui.alert('Network name cannot be empty')
             else:
                 self.networkPrefix = Name(networkName)
-                self.controllerName = Name(networkName).append(controllerName)
+                self.gatewayName = Name(networkName).append('gateway')
                 break
-        
+
     def stop(self):
         self._isStopped = True
                 
     def start(self):
         self.loop = asyncio.get_event_loop()
-        self.face=ThreadsafeFace(self.loop,'')
+        self.face = ThreadsafeFace(self.loop, '')
         self._keyChain.setFace(self.face)
 
-        # initial login
-        if not(self._userKeyStorage.hasAnyUsers()):
-            self.loop.call_soon(self.createFirstUser)
-        else:
-            self.loop.call_soon(self.doUserLogin)
-        
         self._isStopped = False
         self.face.stopWhen(lambda:self._isStopped)
-        
-        try:
-            self.loop.run_forever()
-        except KeyboardInterrupt:
-            self.log.info('User exited')
-        except Exception as e:
-            self.log.exception(exc_info=True)
-        finally:
-            self._isStopped = True
-        
-    def runMainMenu(self):
-        self.ui.alert('Hi!')
+
+        # initial login
+        self.loop.call_soon(self.mainMenu)
+        self.loop.run_forever()
 
 ##
 # Logging
@@ -129,7 +135,7 @@ class IotConsole(object):
     def doUserLogin(self):
         userName=''
         password=''
-        controllerName = None
+        gatewayName = None
         try:
             while len(password) == 0:
                 while len(userName) == 0:
@@ -147,34 +153,6 @@ class IotConsole(object):
         except KeyboardInterrupt: 
             print('Cannot run without user account.')
             self.stop()
-
-    def beginInputLoop(self):
-        # begin taking add requests
-        if self.controllerName is None:
-            self.chooseGateway()
-        self._policyManager.setTrustRootIdentity(self.controllerName)
-        self._policyManager.setEnvironmentPrefix(self.networkPrefix)
-        self._policyManager.se
-            
-        self.loop.call_soon(self.displayMenu)
-
-    def requestUserCertificate(self, userIdentity):
-        if self._controllerName is None:
-            self.chooseGateway()
-
-    def createFirstUser(self):
-        greeting = "It looks like this is the first time you are running the "
-        greeting +=" NDN-IoT console. Please create a user name and password "
-        greeting +=" for configuring the network.\n"
-
-        self.ui.alert(greeting)
-        #ignore the user response for now 
-        created = self.createUser()
-        if not created:
-            print('Cannot run without user account.')
-            self.stop()
-        else:
-            self.beginInputLoop()
 
     def createUser(self):
         created = False
@@ -197,32 +175,60 @@ class IotConsole(object):
                 userName = retList[0]
                 userPass = retList[1]
                 userIdentity = Name(self.networkPrefix).append('user').append(userName)
-                userKeyName = self._identityStorage.getNewKeyName(userIdentity, True)
                 
                 self.ui.alert('Generating network credentials...', False)
-                #publicKey, privateKey = self._identityManager._getNewKeyBits(2048)
-                #self._identityStorage.addKey(userKeyName, KeyType.RSA, publicKey)
-                #self._userKeyStorage.saveUserKey(userIdentity, privateKey, userPass)
 
                 self.ui.alert('Done! User {} created'.format(userName))
                 created = True
                 break
         return created
         
+#####
+# Connect to configured network
+#####
+    def networkConnect(self): pass
+
+
+    def gatewayConfigurationSuccessful(self, newNetworkName):
+        self.networkPrefix = Name(newNetworkName)
+        self.loop.call_soon(self.mainMenu)
+
+    def gatewayConfigure(self):
+        configTask = ConfigureGatewayTask(self.face, self.ui, self.loop,
+            (self.mainMenu,)) 
+        configTask.run(self.gatewayConfigurationSuccessful)
+#####
+# New devices
+#####
+    def pairDevice(self): pass
+
 ######
 # User interaction
 ######
 
-    def displayMenu(self):
-        menuStr = "\n"
-        menuStr += "P)air a new device with serial and PIN\n"
-        menuStr += "D)irectory listing\n"
-        menuStr += "E)xpress an interest\n"
-        menuStr += "Q)uit\n"
+    def mainMenu(self):
 
-        print(menuStr)
-        print ("> ", end="")
-        
+        menuOptions = {'Connect to network': self.networkConnect,
+                       'Set up new gateway': self.gatewayConfigure,
+                       'Pair a device': self.pairDevice,
+                       'Express interest': self.expressInterest,
+                       'Quit': self.stop}   
+
+        if self.networkPrefix is None:
+            connectionStr  = 'No network selected'
+        elif self.currentUser is not None:
+            connectionStr = 'Connected to network {}'.format(self.networkPrefix.toUri())
+        else:
+            connectionStr = 'Network {} selected'.format(self.networkPrefix.toUri())
+        (retCode, retStr) = self.ui.mainMenu('Main Menu', 
+                        menuOptions.keys(), 
+                        preExtras=['--hline', connectionStr])
+
+        if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
+           self.stop()
+        if retCode == Dialog.DIALOG_OK:
+            menuOptions[retStr]()
+
 
     def listDevices(self):
         menuStr = ''
@@ -275,20 +281,6 @@ class IotConsole(object):
         finally:
             self.loop.call_soon(self.displayMenu)
 
-    def handleUserInput(self):
-        inputStr = stdin.readline().upper()
-        if inputStr.startswith('D'):
-            self.listDevices()
-        elif inputStr.startswith('P'):
-            self.beginPairing()
-        elif inputStr.startswith('E'):
-            self.expressInterest()
-        elif inputStr.startswith('Q'):
-            self.stop()
-        else:
-            self.loop.call_soon(self.displayMenu)
-            
-
 #####
 # Certificate things
 #####
@@ -313,7 +305,7 @@ class IotConsole(object):
 
         paramComponent = ProtobufTlv.encode(message)
 
-        interestName = Name(self._controllerName).append("certificateRequest").append(paramComponent)
+        interestName = Name(self.gatewayName).append("certificateRequest").append(paramComponent)
         interest = Interest(interestName)
         interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
         
@@ -399,6 +391,10 @@ class IotConsole(object):
         else:
             self._certificateValidationFailed(data)
 
+
 if __name__ == '__main__':
     n = IotConsole()
-    n.start()
+    try:
+        n.start()
+    finally:
+        n.stop()

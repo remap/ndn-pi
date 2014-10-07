@@ -32,6 +32,7 @@ PY3 = sys.version_info[0] == 3
 string_types = str if PY3 else basestring
 Response = namedtuple('Response', 'returncode value')
 
+#TODO: rename preExtras/postExtras/extra to more sensible names
 
 def flatten(data):
     return list(itertools.chain.from_iterable(data))
@@ -97,8 +98,7 @@ class Dialog(object):
     def mainMenu(self, msg='', items=(), preExtras=(), prefix = ' ', postExtras=(),
                 okLabel='Select'):
         allPreExtras = list(preExtras)
-        allPreExtras.extend(['--nocancel', '--hfile', self.helpFileName('NDNConfig.help')])
-        allPreExtras.extend(['--ok-label', okLabel])
+        allPreExtras.extend(['--nocancel', '--ok-label', okLabel])
 
         return self.menu(msg=msg, items=items, preExtras=allPreExtras, prefix=prefix, extras=postExtras)
 
@@ -210,6 +210,9 @@ class Dialog(object):
             [v.strip() for v in response.value.split('\n')])
         return response
         
+    def gauge(self, msg, percent):
+        extra =  [str(percent)]
+        return self.run('mixedgauge', msg, [], extra)
 
     class FormField(object):
         """ 

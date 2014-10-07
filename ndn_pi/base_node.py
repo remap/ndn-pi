@@ -69,7 +69,7 @@ class BaseNode(object):
         # on the same physical device 
         random.seed(time.time())
         serialPrefix=struct.pack(">L",random.randint(0, 0xffff)).encode('hex')
-        self._instanceSerial = serialPrefix+"-"+self.getDeviceSerial()
+        self._instanceSerial = serialPrefix+"-"+self.getDeviceSerial().lstrip('0')
 
     def getSerial(self):
         return self._instanceSerial

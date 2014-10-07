@@ -2,11 +2,13 @@ from __future__ import print_function
 
 import logging
 import time
-from sys import stdin, stdout
+import sys
+import os
 import struct
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
+from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security import KeyChain
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.encoding import ProtobufTlv
@@ -15,9 +17,7 @@ from pyndn.security.security_exception import SecurityException
 from base_node import BaseNode, Command
 
 from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
-from security import HmacHelper
-
-
+from security import HmacHelper, IotUserPasswordStore
 
 from collections import defaultdict
 import json
@@ -33,6 +33,8 @@ try:
 except NameError:
     pass
 
+#TODO: put a timeout on HMAC from initial configuration 
+#TODO: on reconfiguration, delete user keys+certs
 class IotController(BaseNode):
     """
     The controller class has a few built-in commands:
@@ -44,18 +46,28 @@ class IotController(BaseNode):
         - addDevice: add a device based on HMAC
     It is unlikely that you will need to subclass this.
     """
-    def __init__(self, nodeName, networkName):
+    def __init__(self, configFileName=None):
         super(IotController, self).__init__()
         
-        self.deviceSuffix = Name(nodeName)
-        self.networkPrefix = Name(networkName)
-        self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+        if configFileName is None:
+            configFileName = os.path.join(os.environ['HOME'], '.ndn', 'iot_gateway.conf')
+        try:
+            configReader = BoostInfoParser()
+            configReader.read(configFileName)
+            self.networkPrefix = Name(configReader['networkName'])
+            self.deviceSuffix = Name('gateway')
+            self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+        except:
+            self.networkPrefix = None
+            self.deviceSuffix = None
+            self.prefix = Name(self.configurationPrefix)
 
-        self._policyManager.setEnvironmentPrefix(self.networkPrefix)
-        self._policyManager.setTrustRootIdentity(self.prefix)
-        self._policyManager.setDeviceIdentity(self.prefix)
-        self._policyManager.updateTrustRules()
-        
+            self._policyManager.setEnvironmentPrefix(self.networkPrefix)
+            self._policyManager.setTrustRootIdentity(self.prefix)
+            self._policyManager.setDeviceIdentity(self.prefix)
+            self._policyManager.updateTrustRules()
+
+
         # the controller keeps a directory of capabilities->names
         self._directory = defaultdict(list)
 
@@ -71,29 +83,116 @@ class IotController(BaseNode):
         # 'listDevices' should show identity-serial mappings
         self._insertIntoCapabilities('listDevices', 'directory', False)
 
-        self._directory.update(self._baseDirectory)
-
     def _insertIntoCapabilities(self, commandName, keyword, isSigned):
         newUri = Name(self.prefix).append(Name(commandName)).toUri()
         self._baseDirectory[keyword] = [{'signed':isSigned, 'name':newUri}]
 
     def beforeLoopStart(self):
+        if self.networkPrefix is not None:
+            self.onReboot()
+        else:
+            self.onFirstBoot()
+
+#======================#
+# Unconfigured Gateway #
+#======================#
+
+    def onFirstBoot(self):
+        """
+        This is called on the first boot after a 'device reset'
+        """
+        self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
+        pin = HmacHelper.generatePin() 
+        self._hmacSigner = HmacHelper(pin)
+        print('Waiting for user configuration....')
+        print('Gateway serial:{}\nGateway PIN: {}'.format(self.getSerial(),
+            str(pin).encode('hex'))) 
+        self.face.registerPrefix(self.prefix, self.onConfigurationMessage, 
+            self.onRegisterFailed)
+
+    def onConfigurationMessage(self, prefix, interest, transport, prefixId):
+        # we check to see if there is a component added to our prefix, with
+        # a DeviceConfiguration message, signed with our HMAC
+        interestName  = interest.getName()
+        response = Data(interestName)
+        
+        if (interestName == prefix):
+            # just searching for waiting gateways, return our serial
+            serialAsComponent = Name.Component(self.getSerial())
+            if not interest.getExclude().matches(serialAsComponent):
+                response.getMetaInfo().setFreshnessPeriod(1000)
+                response.setContent(self.getSerial())
+                transport.send(response.wireEncode().buf())
+            return
+        elif (str(interestName[prefix.size()].getValue()) == self.getSerial()):
+            success = False
+            if self._hmacSigner.verifyInterest(interest):
+                try:
+                    message = DeviceConfigurationMessage()
+                    ProtobufTlv.decode(message, interestName[prefix.size()+1].getValue())
+                    networkNameComponents = message.configuration.networkPrefix.components
+                    self.networkPrefix = Name('/'.join(networkNameComponents))
+                    self.deviceSuffix = Name('gateway')
+                    self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+
+                    response.setContent('202') 
+                    success = True
+                    
+                except:
+                    self.log.exception('Could not parse configuration message', exc_info=True)
+                    response.setContent('400')
+            else:
+                response.setContent('401') 
+
+            response.getMetaInfo().setFreshnessPeriod(2000)
+            self._hmacSigner.signData(response)
+            transport.send(response.wireEncode().buf())
+
+            if success:
+                self._policyManager.setEnvironmentPrefix(self.networkPrefix)
+                self._policyManager.setTrustRootIdentity(self.prefix)
+                self._policyManager.setDeviceIdentity(self.prefix)
+
+                self._policyManager.updateTrustRules()
+
+                self.configurePrefixId = prefixId
+                self.face.removeRegisteredPrefix(self.configurePrefixId)
+
+                # we do not save these settings to disk until a user has been
+                # configured
+                # save settings to disk for next boot
+                configFileName = os.path.join(os.environ['HOME'], '.ndn', 'iot_gateway.conf')
+                #self.saveSettingsToDisk(configFileName)
+                self.loop.call_soon(self.onReboot)
+    
+    def saveSettingsToDisk(self, filename):
+        config = BoostInfoParser()
+        config.readPropertyList({'networkName': self.networkPrefix.toUri()})
+        config.write(filename)
+
+
+    def createCredentials(self):
+        newKey = self._identityManager.generateRSAKeyPairAsDefault(
+            self.prefix, isKsk=True)
+        newCert = self._identityManager.selfSign(newKey)
+        self._identityManager.addCertificateAsDefault(newCert)
+
+#====================#
+# Configured Gateway #
+#====================#
+
+    def onReboot(self):
+        self._directory.update(self._baseDirectory)
         if not self._policyManager.hasRootSignedCertificate():
             # make one....
             self.log.warn('Generating controller certificate...')
-            newKey = self._identityManager.generateRSAKeyPairAsDefault(
-                self.prefix, isKsk=True)
-            newCert = self._identityManager.selfSign(newKey)
-            self._identityManager.addCertificateAsDefault(newCert)
+            self.createCredentials()
         self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
         self.face.registerPrefix(self.prefix, 
             self._onCommandReceived, self.onRegisterFailed)
         self.loop.call_soon(self.onStartup)
 
 
-######
-# Initial configuration
-#######
     # TODO: deviceSuffix will be replaced by deviceSerial
     def _addDeviceToNetwork(self, deviceSerial, newDeviceSuffix, pin):
         h = HmacHelper(pin)
@@ -277,6 +376,13 @@ class IotController(BaseNode):
 
         return response
 
+#########
+# User certificates
+#########
+
+    def _createUserCertificate(self, requestMessage):
+        
+
 #####
 # Interest handling
 ####
@@ -303,7 +409,6 @@ class IotController(BaseNode):
             #build and sign certificate
             self.log.debug("Received certificate request")
             self._handleCertificateRequest(interest, transport)
-
         elif afterPrefix == "updateCapabilities":
             # needs to be signed!
             self.log.debug("Received capabilities update")
@@ -315,6 +420,10 @@ class IotController(BaseNode):
                 self._updateDeviceCapabilities(interest)
             self._keyChain.verifyInterest(interest, 
                     onVerifiedCapabilities, self.verificationFailed)
+        elif afterPrefix == "addUser":
+            # also needs to be signed - either with hmac or with another user's
+            # certificate
+            pass
         else:
             response = Data(interest.getName())
             response.setContent("500")
@@ -323,81 +432,7 @@ class IotController(BaseNode):
 
     def onStartup(self):
         self.log.info('Controller is ready')
-        #self.loop.call_soon(self.displayMenu)
-        #self.loop.add_reader(stdin, self.handleUserInput) 
 
-    def displayMenu(self):
-        menuStr = "\n"
-        menuStr += "P)air a new device with serial and PIN\n"
-        menuStr += "D)irectory listing\n"
-        menuStr += "E)xpress an interest\n"
-        menuStr += "Q)uit\n"
-
-        print(menuStr)
-        print ("> ", end="")
-        stdout.flush()
-
-    def listDevices(self):
-        menuStr = ''
-        for capability, commands in self._directory.items():
-            menuStr += '{}:\n'.format(capability)
-            for info in commands:
-                signingStr = 'signed' if info['signed'] else 'unsigned'
-                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
-        print(menuStr)
-        self.loop.call_soon(self.displayMenu)
-
-    def onInterestTimeout(self, interest):
-        print('Interest timed out: {}'.interest.getName().toUri())
-
-    def onDataReceived(self, interest, data):
-        print('Received data named: {}'.format(data.getName().toUri()))
-        print('Contents:\n{}'.format(data.getContent().toRawStr()))
-    
-    def expressInterest(self):
-        try:
-            interestName = input('Interest name: ')
-            if len(interestName):
-                toSign = input('Signed? (y/N): ').upper().startswith('Y')
-                interest = Interest(Name(interestName))
-                interest.setInterestLifetimeMilliseconds(5000)
-                interest.setChildSelector(1)
-                if (toSign):
-                    self.face.makeCommandInterest(interest) 
-                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
-            else:
-                print("Aborted")
-        except KeyboardInterrupt:
-                print("Aborted")
-        finally:
-                self.loop.call_soon(self.displayMenu)
-
-    def beginPairing(self):
-        try:
-            deviceSerial = input('Device serial: ') 
-            devicePin = input('PIN: ')
-            deviceSuffix = input('Node name: ')
-        except KeyboardInterrupt:
-               print('Pairing attempt aborted')
-        else:
-            if len(deviceSerial) and len(devicePin) and len(deviceSuffix):
-                self._addDeviceToNetwork(deviceSerial, Name(deviceSuffix), 
-                    devicePin.decode('hex'))
-            else:
-               print('Pairing attempt aborted')
-        finally:
-            self.loop.call_soon(self.displayMenu)
-
-    def handleUserInput(self):
-        inputStr = stdin.readline().upper()
-        if inputStr.startswith('D'):
-            self.listDevices()
-        elif inputStr.startswith('P'):
-            self.beginPairing()
-        elif inputStr.startswith('E'):
-            self.expressInterest()
-        elif inputStr.startswith('Q'):
-            self.stop()
-        else:
-            self.loop.call_soon(self.displayMenu)
-            
+if __name__ == '__main__':
+    n = IotController()
+    n.start()

@@ -1,4 +1,7 @@
 message AddUserRequestMessage {
     message AddUserRequest {
         required string userName = 239;
-        required string userPass = 
+        required string userPass = 240;
+    }
+    required AddUserRequest credentials = 241;
+}

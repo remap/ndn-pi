@@ -4,7 +4,6 @@ message DeviceConfigurationMessage {
 	}
     message DeviceConfiguration {
         required Name networkPrefix = 231;
-        required Name controllerName = 232;
         required Name deviceSuffix = 233;
     }
 	required DeviceConfiguration configuration = 234;
