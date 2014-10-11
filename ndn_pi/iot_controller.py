@@ -17,11 +17,11 @@ from base_node import BaseNode, Command
 from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage
 from security import HmacHelper
 
-
-
-from collections import defaultdict
+from collections import defaultdict, OrderedDict
 import json
 
+from dialog import Dialog
+import logging 
 try:
     import asyncio
 except ImportError:
@@ -36,12 +36,11 @@ except NameError:
 class IotController(BaseNode):
     """
     The controller class has a few built-in commands:
-        - listDevices: return the names and capabilities of all attached devices
+        - listCommands: return the names and capabilities of all attached devices
         - certificateRequest: takes public key information and returns name of
             new certificate
         - updateCapabilities: should be sent periodically from IotNodes to update their
            command lists
-        - addDevice: add a device based on HMAC
     It is unlikely that you will need to subclass this.
     """
     def __init__(self, nodeName, networkName):
@@ -67,10 +66,13 @@ class IotController(BaseNode):
         self._baseDirectory = {}
 
         # add the built-ins
-        self._insertIntoCapabilities('listDevices', 'directory', False)
-        self._insertIntoCapabilities('updateCapabilities', 'capabilities', True)
+        self._insertIntoCapabilities('listCommands', 'directory', False)
+
+        # TODO: use xDialog in XWindows
+        self.ui = Dialog(backtitle='NDN IoT User Console', height=18, width=78)
 
         self._directory.update(self._baseDirectory)
+        self.setLogLevel(logging.ERROR)
 
     def _insertIntoCapabilities(self, commandName, keyword, isSigned):
         newUri = Name(self.prefix).append(Name(commandName)).toUri()
@@ -81,7 +83,7 @@ class IotController(BaseNode):
             # make one....
             self.log.warn('Generating controller certificate...')
             newKey = self._identityManager.generateRSAKeyPairAsDefault(
-                self.prefix, isKsk=True)
+                self.prefix, isKsk=True, progressFunc=self._showRSAProgress)
             newCert = self._identityManager.selfSign(newKey)
             self._identityManager.addCertificateAsDefault(newCert)
         self.face.setCommandSigningInfo(self._keyChain, self.getDefaultCertificateName())
@@ -93,7 +95,6 @@ class IotController(BaseNode):
 ######
 # Initial configuration
 #######
-    # TODO: deviceSuffix will be replaced by deviceSerial
     def _addDeviceToNetwork(self, deviceSerial, newDeviceSuffix, pin):
         h = HmacHelper(pin)
         self._hmacDevices[deviceSerial] = h
@@ -278,7 +279,7 @@ class IotController(BaseNode):
             return
 
         afterPrefix = interestName.get(prefix.size()).toEscapedString()
-        if afterPrefix == "listDevices":
+        if afterPrefix == "listCommands":
             #compose device list
             self.log.debug("Received device list request")
             response = self._prepareCapabilitiesList(interestName)
@@ -307,53 +308,149 @@ class IotController(BaseNode):
     def onStartup(self):
         # begin taking add requests
         self.loop.call_soon(self.displayMenu)
-        self.loop.add_reader(stdin, self.handleUserInput) 
 
     def displayMenu(self):
-        menuStr = "\n"
-        menuStr += "P)air a new device with serial and PIN\n"
-        menuStr += "D)irectory listing\n"
-        menuStr += "E)xpress an interest\n"
-        menuStr += "Q)uit\n"
 
-        print(menuStr)
-        print ("> ", end="")
-        stdout.flush()
+        menuOptions = OrderedDict([('List network services',self.listCommands),
+                                   ('Pair a device',self.pairDevice),
+                                   ('Express interest',self.expressInterest),
+                                   ('Quit',self.stop)
+                       ])
+        (retCode, retStr) = self.ui.mainMenu('Main Menu', 
+                        menuOptions.keys()) 
+                        
 
-    def listDevices(self):
-        menuStr = ''
-        for capability, commands in self._directory.items():
-            menuStr += '{}:\n'.format(capability)
-            for info in commands:
-                signingStr = 'signed' if info['signed'] else 'unsigned'
-                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
-        print(menuStr)
-        self.loop.call_soon(self.displayMenu)
+        if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
+           self.loop.call_soon(self.displayMenu) # use Quit explicitly
+        if retCode == Dialog.DIALOG_OK:
+            menuOptions[retStr]()
 
-    def onInterestTimeout(self, interest):
-        print('Interest timed out: {}'.interest.getName().toUri())
+#-----------#
+#  UI Tasks #
+#-----------#
 
-    def onDataReceived(self, interest, data):
-        print('Received data named: {}'.format(data.getName().toUri()))
-        print('Contents:\n{}'.format(data.getContent().toRawStr()))
-    
-    def expressInterest(self):
+######
+# RSA key progress
+######
+    def _showRSAProgress(self, displayStr=''):
+        displayStr = displayStr.strip()
+        oldTitle = self.ui.title
+        self.ui.title = 'Generating RSA key'
+        msg = ''
+        if displayStr == 'p,q':
+            msg = '\nGenerating giant prime numbers (this could take a while)'
+        elif displayStr == 'd':
+            msg = '\nGenerating private exponent...'
+        elif displayStr == 'u':
+            msg = '\nChecking CRT coefficient...'
+        self.ui.alert(msg, False)
+        self.ui.title = oldTitle
+
+#######
+# List all commands
+######
+    def listCommands(self):
+       try:
+            commandList = []
+            for capability, commands in self._directory.items():
+                commandList.append('{}:'.format(capability))
+                for info in commands:
+                    signingStr = 'signed' if info['signed'] else 'unsigned'
+                    commandList.append('\t{} ({})'.format(info['name'], signingStr))
+            if len(commandList) == 0:
+                # should not happen
+                commandList = ['----NONE----']
+            self.ui.menu('Available services', commandList, prefix='', extras=['--no-cancel']) 
+       finally:
+            self.loop.call_soon(self.displayMenu)
+
+    def pairDevice(self, serial='', pin='', newName=''):
         try:
-            interestName = input('Interest name: ')
-            if len(interestName):
-                toSign = input('Signed? (y/N): ').upper().startswith('Y')
-                interest = Interest(Name(interestName))
+            fields = [Dialog.FormField('Device serial', serial),
+                      Dialog.FormField('PIN', pin),
+                      Dialog.FormField('Device name', newName)]
+            (retCode, retList) = self.ui.form('Device information', fields)
+            if retCode == Dialog.DIALOG_OK:
+                serial, pin, newName = retList
+                if len(serial)==0 or len(pin)==0 or len(newName)==0:
+                    self.alert('All fields are required')
+                    self.loop.call_soon(self.pairDevice, serial, pin, newName)
+                else:
+                    self._addDeviceToNetwork(serial, Name(newName), 
+                    pin.decode('hex'))
+            elif retCode == Dialog.DIALOG_CANCEL or retCode == Dialog.DIALOG_ESC:
+                self.loop.call_soon(self.displayMenu)
+            
+        except:
+            self.loop.call_soon(self.displayMenu)
+
+    def expressInterest(self):
+        # display a menu of all available interests, on selection allow user to
+        # (1) extend it
+        # (2) send it signed/unsigned
+        # NOTE: should it add custom ones to the list?
+        commandSet = set()
+        wildcard = '<Enter Interest Name>'
+        try:
+            for commands in self._directory.values():
+                commandSet.update([c['name'] for c in commands])
+            commandList = list(commandSet)
+            commandList.append(wildcard)
+            (returnCode, returnStr) = self.ui.menu('Choose a command', 
+                                        commandList, prefix=' ')
+            if returnCode == Dialog.DIALOG_OK:
+                if returnStr == wildcard:
+                    returnStr = self.networkPrefix.toUri()
+                self.loop.call_soon(self._expressCustomInterest, returnStr)
+            else:
+                self.loop.call_soon(self.displayMenu)
+        except:
+            self.loop.call_soon(self.displayMenu)
+
+    def _expressCustomInterest(self, interestName):
+        #TODO: make this a form, add timeout field
+        try:
+            handled = False
+            (returnCode, returnStr) = self.ui.prompt('Send interest', 
+                                        interestName,
+                                        preExtra = ['--extra-button', 
+                                                  '--extra-label', 'Signed',
+                                                  '--ok-label', 'Unsigned'])
+            if returnCode==Dialog.DIALOG_ESC or returnCode==Dialog.DIALOG_CANCEL:
+                self.loop.call_soon(self.expressInterest)
+            else:
+                interestName = Name(returnStr)
+                doSigned = (returnCode == Dialog.DIALOG_EXTRA)
+                interest = Interest(interestName)
                 interest.setInterestLifetimeMilliseconds(5000)
                 interest.setChildSelector(1)
-                if (toSign):
+                interest.setMustBeFresh(True)
+                if (doSigned):
                     self.face.makeCommandInterest(interest) 
+                self.ui.alert('Waiting for response to {}'.format(interestName.toUri()), False) 
                 self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
-            else:
-                print("Aborted")
-        except KeyboardInterrupt:
-                print("Aborted")
+        except:
+            self.loop.call_soon(self.expressInterest)
+
+    def onInterestTimeout(self, interest):
+        try:
+            self.ui.alert('Interest timed out:\n{}'.format(interest.getName().toUri()))
+        except:
+            self.ui.alert('Interest timed out')
         finally:
-                self.loop.call_soon(self.displayMenu)
+            self.loop.call_soon(self.expressInterest)
+
+    def onDataReceived(self, interest, data):
+        try:
+            dataString = '{}\n\n'.format(data.getName().toUri())
+            dataString +='Contents:\n{}'.format(repr(data.getContent().toRawStr()))
+            self.ui.alert(dataString)
+        except:
+            self.ui.alert('Exception occured displaying data contents')
+        finally:
+            self.loop.call_soon(self.expressInterest)
+    
+"""
 
     def beginPairing(self):
         try:
@@ -370,21 +467,7 @@ class IotController(BaseNode):
                print('Pairing attempt aborted')
         finally:
             self.loop.call_soon(self.displayMenu)
-
-    def handleUserInput(self):
-        inputStr = stdin.readline().upper()
-        if inputStr.startswith('D'):
-            self.listDevices()
-        elif inputStr.startswith('P'):
-            self.beginPairing()
-        elif inputStr.startswith('E'):
-            self.expressInterest()
-        elif inputStr.startswith('Q'):
-            self.stop()
-        else:
-            self.loop.call_soon(self.displayMenu)
-            
-        
+"""
 
 if __name__ == '__main__':
     import os

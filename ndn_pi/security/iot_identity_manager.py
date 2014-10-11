@@ -42,15 +42,15 @@ class IotIdentityManager(IdentityManager):
     def addPrivateKey(self, keyName, keyDer):
         self._privateKeyStorage.addPrivateKey(keyName, keyDer)
 
-    def _getNewKeyBits(self, keySize):
+    def _getNewKeyBits(self, keySize, progress_func=None):
         # returns public and private key DER in blobs
-        key = RSA.generate(keySize)
+        key = RSA.generate(keySize, progress_func=progress_func)
         publicDer = key.publickey().exportKey(format='DER')
         privateDer = key.exportKey(format='DER', pkcs=8)
         return (Blob(publicDer, False), Blob(privateDer, False))
         
 
-    def generateRSAKeyPair(self, identityName, isKsk=False, keySize=2048):
+    def generateRSAKeyPair(self, identityName, isKsk=False, keySize=2048, progressFunc=None):
         """
         Generate a pair of RSA keys for the specified identity.
         
@@ -60,18 +60,20 @@ class IotIdentityManager(IdentityManager):
           Data-Signing-Key.
         :param int keySize: (optional) The size of the key. If omitted, use a 
           default secure key size.
+        :param function progressFunc: An update function taking a string 
+            argument. See PyCrypto's RSA.generate for more information.
         :return: The generated key name.
         :rtype: Name
         """
         keyName = self._identityStorage.getNewKeyName(identityName, isKsk)
-        publicBits, privateBits = self._getNewKeyBits(keySize)
+        publicBits, privateBits = self._getNewKeyBits(keySize, progressFunc)
         self._identityStorage.addKey(keyName, KeyType.RSA, publicBits)
         self._privateKeyStorage.addPrivateKey(keyName, privateBits)
 
         return keyName
         
 
-    def generateRSAKeyPairAsDefault(self, identityName, isKsk=False, keySize=2048):
+    def generateRSAKeyPairAsDefault(self, identityName, isKsk=False, keySize=2048, progressFunc=None):
         """
         Generate a pair of RSA keys for the specified identity and set it as 
         default key for the identity.
@@ -82,10 +84,12 @@ class IotIdentityManager(IdentityManager):
           Data-Signing-Key.
         :param int keySize: (optional) The size of the key. If omitted, use a 
           default secure key size.
+        :param function progressFunc: An update function taking a string 
+            argument. See PyCrypto's RSA.generate for more information
         :return: The generated key name.
         :rtype: Name
         """
-        newKeyName = self.generateRSAKeyPair(identityName, isKsk, keySize)
+        newKeyName = self.generateRSAKeyPair(identityName, isKsk, keySize, progressFunc)
         self._identityStorage.setDefaultKeyNameForIdentity(newKeyName)
         return newKeyName
     
