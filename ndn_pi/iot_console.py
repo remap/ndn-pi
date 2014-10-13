@@ -74,6 +74,7 @@ class IotConsole(object):
         self._policyManager.updateTrustRules()
 
         self.foundCommands = {}
+        self.unconfiguredDevices = []
         
         # TODO: use xDialog in XWindows
         self.ui = Dialog(backtitle='NDN IoT User Console', height=18, width=78)
@@ -184,27 +185,76 @@ class IotConsole(object):
 # New device
 ######
 
-    def pairDevice(self, serial='', pin='', newName=''):
-        fields = [Dialog.FormField('Device serial', serial),
-                  Dialog.FormField('PIN', pin),
+    def pairDevice(self):
+        self._scanForUnconfiguredDevices()
+    
+
+    def _enterPairingInfo(self, serial, pin='', newName=''):
+        fields = [Dialog.FormField('PIN', pin),
                   Dialog.FormField('Device name', newName)]
-        (retCode, retList) = self.ui.form('Device information', fields)
+        (retCode, retList) = self.ui.form('Pairing device {}'.format(serial)
+                        , fields)
         if retCode == Dialog.DIALOG_OK:
-            serial, pin, newName = retList
-            if len(serial)==0 or len(pin)==0 or len(newName)==0:
+            pin, newName = retList
+            if len(pin)==0 or len(newName)==0:
                 self.ui.alert('All fields are required')
-                self.loop.call_soon(self.pairDevice, serial, pin, newName)
+                self.loop.call_soon(self._enterPairingInfo, serial, pin, newName)
             else:
                 try:
                     pinBytes = pin.decode('hex')
                 except TypeError:
                     self.ui.alert('Pin is invalid')
-                    self.loop.call_soon(self.pairDevice, serial, pin, newName)
+                    self.loop.call_soon(self._enterPairingInfo, serial, pin, newName)
                 else:
                     self._addDeviceToNetwork(serial, newName, 
                 pin.decode('hex'))
         elif retCode == Dialog.DIALOG_CANCEL or retCode == Dialog.DIALOG_ESC:
+            self.loop.call_soon(self._showConfigurationList)
+
+    def _showConfigurationList(self):
+        foundDevices = self.unconfiguredDevices[:]
+        emptyStr = '----NONE----'
+        if len(foundDevices) == 0:
+            foundDevices.append(emptyStr)
+        retCode, retStr = self.ui.menu('Select a device to configure', 
+            foundDevices, preExtras = ['--ok-label', 'Configure',
+                                       '--extra-button',
+                                       '--extra-label', 'Refresh'])
+        if retCode == Dialog.DIALOG_CANCEL or retCode == Dialog.DIALOG_ESC:
             self.loop.call_soon(self.displayMenu)
+        elif retCode == Dialog.DIALOG_EXTRA:
+            self.loop.call_soon(self._scanForUnconfiguredDevices)
+        elif retCode == Dialog.DIALOG_OK and retStr != emptyStr:
+            self.loop.call_soon(self._enterPairingInfo, retStr)
+        else:
+            self.loop.call_soon(self._showConfigurationList)
+
+    def _scanForUnconfiguredDevices(self):
+        # unconfigured devices should register '/localhop/configure'
+        # we keep asking for unconfigured devices until we stop getting replies
+
+        foundDevices = []
+
+        self.ui.alert('Scanning for unconfigured devices...', False)
+
+        def onDeviceTimeout(interest):
+            # assume we're done - everyone is excluded
+            self.unconfiguredDevices = foundDevices
+            self.loop.call_soon(self._showConfigurationList)
+
+        def onDeviceResponse(interest, data):
+            updatedInterest = Interest(interest)
+            deviceSerial = str(data.getContent())
+            if len(deviceSerial) > 0:
+                foundDevices.append(deviceSerial)
+                updatedInterest.getExclude().appendComponent(Name.Component(deviceSerial))
+            # else ignore the malformed response
+            self.face.expressInterest(updatedInterest, onDeviceResponse, onDeviceTimeout)
+
+        interest= Interest(Name('/localhop/configure'))
+        interest.setInterestLifetimeMilliseconds(2000)
+        self.face.expressInterest(interest, onDeviceResponse, onDeviceTimeout)
+            
 
     def _addDeviceToNetwork(self, serial, suffix, pin):
         self.ui.alert('Sending pairing info to gateway...', False)

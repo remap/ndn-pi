@@ -35,8 +35,6 @@ from ndn_pi.security import HmacHelper
 from pyndn.util.boost_info_parser import BoostInfoParser
 from pyndn.security.security_exception import SecurityException
 
-default_prefix = Name('/localhop/configure')
-
 try:
     import asyncio
 except ImportError:
@@ -59,7 +57,7 @@ class IotNode(BaseNode):
         
         self.deviceSerial = self.getSerial()
 
-        self.prefix = Name(default_prefix).append(self.deviceSerial)
+        self.prefix = Name(self._hubPrefix).append(self.deviceSerial)
 
         self._certificateTimeouts = 0
 
@@ -74,7 +72,7 @@ class IotNode(BaseNode):
 
     def beforeLoopStart(self):
         print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
-        self.face.registerPrefix(self.prefix, 
+        self.face.registerPrefix(self._hubPrefix,
             self._onConfigurationReceived, self.onRegisterFailed)
 
 #####
@@ -87,11 +85,19 @@ class IotNode(BaseNode):
     def _onConfigurationReceived(self, prefix, interest, transport, prefixId):
         # the interest we get here is signed by HMAC, let's verify it
         self.tempPrefixId = prefixId # didn't get it from register because of the event loop
-        dataName = Name(interest.getName())
-        replyData = Data(dataName)
-        if (self._hmacHandler.verifyInterest(interest)):
-            # we have a match! decode the controller's name
-            configComponent = interest.getName().get(prefix.size())
+        interestName = interest.getName()
+        replyData = Data(interestName)
+        if len(interestName) == len(prefix):
+            # this is a discovery request. Check the exclude to see if we should
+            # return our serial
+            serial = self.getSerial()
+            serialComponent = Name.Component(serial)
+            if not interest.getExclude().matches(serialComponent):
+                replyData.setContent(serial)
+                self.sendData(replyData, transport, False) # no point in signing
+        elif (self._hmacHandler.verifyInterest(interest)):
+            # we have a match! decode the network parameters
+            configComponent = interest.getName()[len(prefix)+1]
             replyData.setContent('200')
             self._hmacHandler.signData(replyData, keyName=self.prefix)
             transport.send(replyData.wireEncode().buf())
@@ -109,7 +115,7 @@ class IotNode(BaseNode):
 
             self._configureIdentity = Name(networkPrefix).append(self.deviceSuffix) 
             self._sendCertificateRequest(self._configureIdentity)
-        #else, ignore!
+        #else, ignore
             
     def _onConfigurationRegistrationFailure(self, prefix):
         #this is so bad... try a few times

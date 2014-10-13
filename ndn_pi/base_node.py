@@ -20,6 +20,7 @@
 import logging
 import time
 import sys
+import random
 
 from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.security import KeyChain
@@ -60,6 +61,23 @@ class BaseNode(object):
         self._prepareLogging()
 
         self._setupComplete = False
+        self._instanceSerial = None
+
+        # waiting devices register this prefix and respond to discovery
+        # or configuration interest
+        self._hubPrefix = Name('/localhop/configure')
+
+    def getSerial(self):
+        # since you may wish to run two nodes on a Raspberry Pi, each
+        # node will generate a unique per-run serial
+        if self._instanceSerial is None:
+            prefixLen = 4
+            prefix = ''
+            for i in range(prefixLen):
+                prefix += (chr(random.randint(0,0xff)))
+            suffix = self.getDeviceSerial().lstrip('0')
+            self._instanceSerial = '-'.join([prefix.encode('hex'), suffix])
+        return self._instanceSerial
 
 ##
 # Logging
@@ -185,7 +203,7 @@ class BaseNode(object):
         self.log.info("Received invalid" + dataOrInterest.getName().toUri())
 
     @staticmethod
-    def getSerial():
+    def getDeviceSerial():
         """
         Find and return the serial number of the Raspberry Pi. Provided in case
         you wish to distinguish data from nodes with the same name by serial.
