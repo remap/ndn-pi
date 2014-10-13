@@ -130,7 +130,7 @@ class Dialog(object):
 
     def menu(self, msg='', items=(), preExtras = (), prefix = '', extras=()):
         if len(items) > 0:
-            if isinstance(items[0], str):
+            if isinstance(items[0], basestring):
                 items = [(i, '') for i in items]
             else:
                 items = [(k, prefix + v) for k,v in items]

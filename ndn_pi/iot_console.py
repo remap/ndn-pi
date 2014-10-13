@@ -16,385 +16,322 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 # A copy of the GNU General Public License is in the file COPYING.
+
 from __future__ import print_function
 
 import logging
-import time
-import struct
 
-from pyndn import Name, Interest, Data, ThreadsafeFace, Exclude
+from pyndn import Name, Face, Interest, Data, ThreadsafeFace
 from pyndn.util import Blob
 from pyndn.security import KeyChain
-from pyndn.security.certificate import IdentityCertificate
 from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
 
-from console_tasks import *
+from ndn_pi.security import IotIdentityStorage,IotPolicyManager, IotIdentityManager
+from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage, DevicePairingInfoMessage
 
-from commands import CertificateRequestMessage, DeviceConfigurationMessage
-from security import IotPolicyManager, IotIdentityStorage, IotIdentityManager, HmacHelper
+from collections import defaultdict, OrderedDict
+import json
+import base64
 
 from dialog import Dialog
-import threading
-
-from collections import namedtuple, deque
-import json
-
-# more Python 2+3 compatibility
+import logging 
 try:
     import asyncio
 except ImportError:
     import trollius as asyncio
 
+# more Python 2+3 compatibility
 try:
     input = raw_input
 except NameError:
     pass
 
-#todo - make a true (X, Windows, OS X) GUI
-
-
 class IotConsole(object):
     """
-    This is the point of user interaction: you can pair devices, request a
-    listing of unpaired devices or of available commands,  and express 
-    interests manually.
+    This uses the controller's credentials to provide a management interface
+    to the user.
+    It does not go through the security handshake (as it should be run on the
+    same device as the controller) and so does not inherit from the BaseNode.
     """
-    def __init__(self):
+    def __init__(self, networkName, nodeName):
         super(IotConsole, self).__init__()
+        
+        self.deviceSuffix = Name(nodeName)
+        self.networkPrefix = Name(networkName)
+        self.prefix = Name(self.networkPrefix).append(self.deviceSuffix)
+
         self._identityStorage = IotIdentityStorage()
-        self._identityManager = IotIdentityManager()
         self._policyManager = IotPolicyManager(self._identityStorage)
-
+        self._identityManager = IotIdentityManager(self._identityStorage)
         self._keyChain = KeyChain(self._identityManager, self._policyManager)
-        self.networkPrefix = None
-        self.currentUser = None
 
-        # serial numbers of waiting gateways
-        self._waitingGateways = []
+        self._identityStorage.setDefaultIdentity(self.prefix)
 
+        self._policyManager.setEnvironmentPrefix(self.networkPrefix)
+        self._policyManager.setTrustRootIdentity(self.prefix)
+        self._policyManager.setDeviceIdentity(self.prefix)
+        self._policyManager.updateTrustRules()
 
+        self.foundCommands = {}
+        
+        # TODO: use xDialog in XWindows
         self.ui = Dialog(backtitle='NDN IoT User Console', height=18, width=78)
-        self._prepareLogging()
 
-    def chooseNetwork(self):
-        networkName = ''
-        while True:
-            (retCode, retVal) = self.ui.prompt('Network name')
-            if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
-                break
-            networkName = retVal
-            
-            if len(networkName) == 0:
-                self.ui.alert('Network name cannot be empty')
-            else:
-                self.networkPrefix = Name(networkName)
-                self.gatewayName = Name(networkName).append('gateway')
-                break
+        trolliusLogger = logging.getLogger('trollius')
+        trolliusLogger.addHandler(logging.StreamHandler())
 
-    def stop(self):
-        self._isStopped = True
-                
     def start(self):
+        """
+        Start up the UI
+        """
         self.loop = asyncio.get_event_loop()
         self.face = ThreadsafeFace(self.loop, '')
-        self._keyChain.setFace(self.face)
+
+        controllerCertificateName = self._identityStorage.getDefaultCertificateNameForIdentity(self.prefix)
+        self.face.setCommandSigningInfo(self._keyChain, controllerCertificateName)
+        self._keyChain.setFace(self.face) # shouldn't be necessarym but doesn't hurt
 
         self._isStopped = False
         self.face.stopWhen(lambda:self._isStopped)
 
-        # initial login
-        self.loop.call_soon(self.mainMenu)
-        self.loop.run_forever()
-
-##
-# Logging
-##
-    def _prepareLogging(self):
-        self.log = logging.getLogger(str(self.__class__))
-        self.log.setLevel(logging.DEBUG)
-        logFormat = "%(asctime)-15s %(name)-20s %(funcName)-20s (%(levelname)-8s):\n\t%(message)s"
-        self._console = logging.StreamHandler()
-        self._console.setFormatter(logging.Formatter(logFormat))
-        self._console.setLevel(logging.WARN)
-        # without this, a lot of ThreadsafeFace errors get swallowed up
-        logging.getLogger("trollius").addHandler(self._console)
-        self.log.addHandler(self._console)
-
-    def setLogLevel(self, level):
-        """
-        Set the log level that will be output to standard error
-        :param level: A log level constant defined in the logging module (e.g. logging.INFO) 
-        """
-        self._console.setLevel(level)
-
-########
-# Login
-########
-
-    def doUserLogin(self):
-        userName=''
-        password=''
-        gatewayName = None
+        self.loop.call_soon(self.displayMenu)
         try:
-            while len(password) == 0:
-                while len(userName) == 0:
-                    userName = input('User name: ')
-                password = getpass('Password: ')
-            userIdentity = Name(self.networkPrefix).append('user').append(userName)
-            userKey = self._userKeyStorage.getUserKey(userIdentity, password)
-            if userKey.toRawStr() is None:
-                print('Incorrect user name or password.\n')
-                self.loop.call_soon(self.doUserLogin)
-            else:
-                self.currentUser = UserCredentials(userIdentity.toUri(), userKey)
-                self.loop.call_soon(self.beginInputLoop)
-            
-        except KeyboardInterrupt: 
-            print('Cannot run without user account.')
-            self.stop()
+            self.loop.run_forever()
+        except KeyboardInterrupt:
+            pass
+        except Exception as e:
+            print(e)
+            #self.log('Exception', e)
+        finally:
+            self._isStopped = True
 
-    def createUser(self):
-        created = False
-        while True:
-            userName=''
-            formFields = [Dialog.FormField('User name', userName),
-                          Dialog.FormField('Password', isPassword=True),
-                          Dialog.FormField('Confirm password', isPassword=True)]
-            retCode, retList = self.ui.form('New User', formFields)
-            if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
-                self.ui.alert('User creation aborted')
-                break
-            userName = retList[0]
-            
-            if len(retList[0]) == 0 or len(retList[1]) == 0:
-                self.ui.alert('Please fill in all fields')
-            elif retList[1] != retList[2]:
-                self.ui.alert('Passwords do not match')
-            else:
-                userName = retList[0]
-                userPass = retList[1]
-                userIdentity = Name(self.networkPrefix).append('user').append(userName)
-                
-                self.ui.alert('Generating network credentials...', False)
-
-                self.ui.alert('Done! User {} created'.format(userName))
-                created = True
-                break
-        return created
+    def stop(self):
+        self._isStopped = True
         
-#####
-# Connect to configured network
-#####
-    def networkConnect(self): pass
+#######
+# GUI
+#######
 
+    def displayMenu(self):
 
-    def gatewayConfigurationSuccessful(self, newNetworkName):
-        self.networkPrefix = Name(newNetworkName)
-        self.loop.call_soon(self.mainMenu)
-
-    def gatewayConfigure(self):
-        configTask = ConfigureGatewayTask(self.face, self.ui, self.loop,
-            (self.mainMenu,)) 
-        configTask.run(self.gatewayConfigurationSuccessful)
-#####
-# New devices
-#####
-    def pairDevice(self): pass
-
-######
-# User interaction
-######
-
-    def mainMenu(self):
-
-        menuOptions = {'Connect to network': self.networkConnect,
-                       'Set up new gateway': self.gatewayConfigure,
-                       'Pair a device': self.pairDevice,
-                       'Express interest': self.expressInterest,
-                       'Quit': self.stop}   
-
-        if self.networkPrefix is None:
-            connectionStr  = 'No network selected'
-        elif self.currentUser is not None:
-            connectionStr = 'Connected to network {}'.format(self.networkPrefix.toUri())
-        else:
-            connectionStr = 'Network {} selected'.format(self.networkPrefix.toUri())
+        menuOptions = OrderedDict([('List network services',self.listCommands),
+                                   ('Pair a device',self.pairDevice),
+                                   ('Express interest',self.expressInterest),
+                                   ('Quit',self.stop)
+                       ])
         (retCode, retStr) = self.ui.mainMenu('Main Menu', 
-                        menuOptions.keys(), 
-                        preExtras=['--hline', connectionStr])
+                        menuOptions.keys()) 
+                        
 
         if retCode == Dialog.DIALOG_ESC or retCode == Dialog.DIALOG_CANCEL:
+           # TODO: ask if you're sure you want to quit
            self.stop()
         if retCode == Dialog.DIALOG_OK:
             menuOptions[retStr]()
 
 
-    def listDevices(self):
-        menuStr = ''
-        for capability, commands in self._directory.items():
-            menuStr += '{}:\n'.format(capability)
-            for info in commands:
-                signingStr = 'signed' if info['signed'] else 'unsigned'
-                menuStr += '\t{} ({})\n'.format(info['name'], signingStr)
-        print(menuStr)
-        self.loop.call_soon(self.displayMenu)
+#######
+# List all commands
+######
+    def listCommands(self):
+        self._requestDeviceList(self._showCommandList, self.displayMenu)
 
-    def onInterestTimeout(self, interest):
-        print('Interest timed out: {}'.interest.getName().toUri())
+    def _requestDeviceList(self, successCallback, timeoutCallback):
+        self.ui.alert('Requesting services list...', False)
+        interestName = Name(self.prefix).append('listCommands')
+        interest = Interest(interestName)
+        interest.setInterestLifetimeMilliseconds(3000)
+        #self.face.makeCommandInterest(interest)
+        self.face.expressInterest(interest, 
+            self._makeOnCommandListCallback(successCallback),
+            self._makeOnCommandListTimeoutCallback(timeoutCallback))
 
-    def onDataReceived(self, interest, data):
-        print('Received data named: {}'.format(data.getName().toUri()))
-        print('Contents:\n{}'.format(data.getContent().toRawStr()))
-    
-    def expressInterest(self):
-        try:
-            interestName = input('Interest name: ')
-            if len(interestName):
-                toSign = input('Signed? (y/N): ').upper().startswith('Y')
-                interest = Interest(Name(interestName))
-                interest.setInterestLifetimeMilliseconds(5000)
-                interest.setChildSelector(1)
-                if (toSign):
-                    self.face.makeCommandInterest(interest) 
-                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
-            else:
-                print("Aborted")
-        except KeyboardInterrupt:
-                print("Aborted")
-        finally:
+    def _makeOnCommandListTimeoutCallback(self, callback):
+        def onCommandListTimeout(interest):
+            self.ui.alert('Timed out waiting for services list')
+            self.loop.call_soon(callback)
+        return onCommandListTimeout
+
+    def _makeOnCommandListCallback(self, callback):
+        def onCommandListReceived(interest, data):
+            try:
+                commandInfo = json.loads(str(data.getContent()))
+            except:
+                self.ui.alert('An error occured while reading the services list')
                 self.loop.call_soon(self.displayMenu)
-
-    def beginPairing(self):
-        try:
-            deviceSerial = input('Device serial: ') 
-            devicePin = input('PIN: ')
-            deviceSuffix = input('Node name: ')
-        except KeyboardInterrupt:
-               print('Pairing attempt aborted')
-        else:
-            if len(deviceSerial) and len(devicePin) and len(deviceSuffix):
-                self._addDeviceToNetwork(deviceSerial, Name(deviceSuffix), 
-                    devicePin.decode('hex'))
             else:
-               print('Pairing attempt aborted')
+                self.foundCommands = commandInfo
+                self.loop.call_soon(callback)
+        return onCommandListReceived
+
+    def _showCommandList(self):
+       try:
+            commandList = []
+            for capability, commands in self.foundCommands.items():
+                commandList.append('{}:'.format(capability))
+                for info in commands:
+                    signingStr = 'signed' if info['signed'] else 'unsigned'
+                    commandList.append('\t{} ({})'.format(info['name'], signingStr))
+            if len(commandList) == 0:
+                # should not happen
+                commandList = ['----NONE----']
+            self.ui.menu('Available services', commandList, prefix='', extras=['--no-cancel']) 
+       finally:
+            self.loop.call_soon(self.displayMenu)
+
+#######
+# New device
+######
+
+    def pairDevice(self, serial='', pin='', newName=''):
+        fields = [Dialog.FormField('Device serial', serial),
+                  Dialog.FormField('PIN', pin),
+                  Dialog.FormField('Device name', newName)]
+        (retCode, retList) = self.ui.form('Device information', fields)
+        if retCode == Dialog.DIALOG_OK:
+            serial, pin, newName = retList
+            if len(serial)==0 or len(pin)==0 or len(newName)==0:
+                self.ui.alert('All fields are required')
+                self.loop.call_soon(self.pairDevice, serial, pin, newName)
+            else:
+                try:
+                    pinBytes = pin.decode('hex')
+                except TypeError:
+                    self.ui.alert('Pin is invalid')
+                    self.loop.call_soon(self.pairDevice, serial, pin, newName)
+                else:
+                    self._addDeviceToNetwork(serial, newName, 
+                pin.decode('hex'))
+        elif retCode == Dialog.DIALOG_CANCEL or retCode == Dialog.DIALOG_ESC:
+            self.loop.call_soon(self.displayMenu)
+
+    def _addDeviceToNetwork(self, serial, suffix, pin):
+        self.ui.alert('Sending pairing info to gateway...', False)
+        # we must encrypt this so no one can see the pin!
+        message = DevicePairingInfoMessage()
+        message.info.deviceSuffix = suffix
+        message.info.deviceSerial = serial
+        message.info.devicePin = pin
+        rawBytes = ProtobufTlv.encode(message)
+        encryptedBytes = self._identityManager.encryptForIdentity(rawBytes, self.prefix)
+        encodedBytes = base64.urlsafe_b64encode(str(encryptedBytes))
+        interestName = Name(self.prefix).append('addDevice').append(encodedBytes)
+        interest = Interest(interestName)
+        # todo: have the controller register this console as a listener
+        # and update it with pairing status
+        interest.setInterestLifetimeMilliseconds(5000)
+        self.face.makeCommandInterest(interest)
+
+        self.face.expressInterest(interest, self._onAddDeviceResponse, 
+            self._onAddDeviceTimeout)
+        
+    def _onAddDeviceResponse(self, interest, data):
+        try:
+            responseCode = int(str(data.getContent()))
+            if responseCode == 202:
+                self.ui.alert('Gateway received pairing info')
+            else:
+                self.ui.alert('Error encountered while sending pairing info')
+        except:
+            self.ui.alert('Exception encountered while decoding gateway reply')
         finally:
             self.loop.call_soon(self.displayMenu)
 
-#####
-# Certificate things
-#####
-    # taken almost straight from IotNode...
-    def _sendCertificateRequest(self, keyIdentity):
-        """
-        We compose a command interest with our public key info so the controller
-        can sign us a certificate that can be used with other nodes in the network.
-        """
-
-        keyName = self._identityStorage.getDefaultKeyNameForIdentity(keyIdentity)
-
-        keyType = self._identityStorage.getKeyType(keyName)
-        keyDer = self._identityStorage.getKey(keyName)
-
-        message = CertificateRequestMessage()
-        message.command.keyType = keyType
-        message.command.keyBits = keyDer.toRawStr()
-
-        for component in range(newKeyName.size()):
-            message.command.keyName.components.append(keyName.get(component).toEscapedString())
-
-        paramComponent = ProtobufTlv.encode(message)
-
-        interestName = Name(self.gatewayName).append("certificateRequest").append(paramComponent)
-        interest = Interest(interestName)
-        interest.setInterestLifetimeMilliseconds(10000) # takes a tick to verify and sign
+    def _onAddDeviceTimeout(self, interest):
+        self.ui.alert('Timed out sending pairing info to gateway')
+        self.loop.call_soon(self.displayMenu)
         
 
-        self.log.info("Sending certificate request to controller")
-        self.log.debug("Certificate request: "+interest.getName().toUri())
-        self.face.expressInterest(interest, self._onCertificateReceived, self._onCertificateTimeout)
+######
+# Express interest
+#####
+
    
-
-    def _onCertificateTimeout(self, interest):
-        #give up?
-        self.log.warn("Timed out trying to get certificate")
-        if self._certificateTimeouts > 5:
-            self.log.critical("Trust root cannot be reached, exiting")
-            self._isStopped = True
+    def expressInterest(self):
+        if len(self.foundCommands) == 0:
+            self._requestDeviceList(self._showInterestMenu, self._showInterestMenu)
         else:
-            self._certificateTimeouts += 1
-            self.loop.call_soon(self._sendCertificateRequest, self._configureIdentity)
-        pass
+            self.loop.call_soon(self._showInterestMenu)
 
-
-    def _processValidCertificate(self, data):
-        # unpack the cert from the HMAC signed packet and verify
+    def _showInterestMenu(self):
+        # display a menu of all available interests, on selection allow user to
+        # (1) extend it
+        # (2) send it signed/unsigned
+        # NOTE: should it add custom ones to the list?
+        commandSet = set()
+        wildcard = '<Enter Interest Name>'
         try:
-            newCert = IdentityCertificate()
-            newCert.wireDecode(data.getContent())
-            self.log.info("Received certificate from controller")
-            self.log.debug(str(newCert))
+            for commands in self.foundCommands.values():
+                commandSet.update([c['name'] for c in commands])
+            commandList = list(commandSet)
+            commandList.append(wildcard)
+            (returnCode, returnStr) = self.ui.menu('Choose a command', 
+                                        commandList, prefix=' ')
+            if returnCode == Dialog.DIALOG_OK:
+                if returnStr == wildcard:
+                    returnStr = self.networkPrefix.toUri()
+                self.loop.call_soon(self._expressCustomInterest, returnStr)
+            else:
+                self.loop.call_soon(self.displayMenu)
+        except:
+            self.loop.call_soon(self.displayMenu)
 
-            # NOTE: we download and install the root certificate without verifying it (!)
-            # otherwise our policy manager will reject it.
-            # we may need a static method on KeyChain to allow verifying before adding
+    def _expressCustomInterest(self, interestName):
+        #TODO: make this a form, add timeout field
+        try:
+            handled = False
+            (returnCode, returnStr) = self.ui.prompt('Send interest', 
+                                        interestName,
+                                        preExtra = ['--extra-button', 
+                                                  '--extra-label', 'Signed',
+                                                  '--ok-label', 'Unsigned'])
+            if returnCode==Dialog.DIALOG_ESC or returnCode==Dialog.DIALOG_CANCEL:
+                self.loop.call_soon(self.expressInterest)
+            else:
+                interestName = Name(returnStr)
+                doSigned = (returnCode == Dialog.DIALOG_EXTRA)
+                interest = Interest(interestName)
+                interest.setInterestLifetimeMilliseconds(5000)
+                interest.setChildSelector(1)
+                interest.setMustBeFresh(True)
+                if (doSigned):
+                    self.face.makeCommandInterest(interest) 
+                self.ui.alert('Waiting for response to {}'.format(interestName.toUri()), False) 
+                self.face.expressInterest(interest, self.onDataReceived, self.onInterestTimeout)
+        except:
+            self.loop.call_soon(self.expressInterest)
+
+    def onInterestTimeout(self, interest):
+        try:
+            self.ui.alert('Interest timed out:\n{}'.format(interest.getName().toUri()))
+        except:
+            self.ui.alert('Interest timed out')
+        finally:
+            self.loop.call_soon(self.expressInterest)
+
+    def onDataReceived(self, interest, data):
+        try:
+            dataString = '{}\n\n'.format(data.getName().toUri())
+            dataString +='Contents:\n{}'.format(repr(data.getContent().toRawStr()))
+            self.ui.alert(dataString)
+        except:
+            self.ui.alert('Exception occured displaying data contents')
+        finally:
+            self.loop.call_soon(self.expressInterest)
     
-            rootCertName = newCert.getSignature().getKeyLocator().getKeyName()
-            # update trust rules so we trust the controller
-            self._policyManager.setDeviceIdentity(self._configureIdentity) 
-            self._policyManager.updateTrustRules()
-
-            def onRootCertificateDownload(interest, data):
-                try:
-                    self._identityStorage.addCertificate(data)
-                except SecurityException:
-                    # already exists
-                    pass
-                self._keyChain.verifyData(newCert, self._finalizeCertificateDownload, self._certificateValidationFailed)
-
-            def onRootCertificateTimeout(interest):
-                # TODO: limit number of tries, then revert trust root + network prefix
-                # reset salt, create new Hmac key
-                self.face.expressInterest(rootCertName, onRootCertificateDownload, onRootCertificateTimeout)
-
-        except Exception as e:
-            self.log.exception("Could not import new certificate", exc_info=True)
-   
-    def _finalizeCertificateDownload(self, newCert):
-        try:
-            self._identityManager.addCertificate(newCert)
-        except SecurityException:
-            pass # can't tell existing certificat from another error
-        self._identityManager.setDefaultCertificateForKey(newCert)
-
-        # unregister localhop prefix, register new prefix, change identity
-        self.prefix = self._configureIdentity
-        self._policyManager.setDeviceIdentity(self.prefix)
-
-        self.face.setCommandCertificateName(self.getDefaultCertificateName())
-
-        self.face.removeRegisteredPrefix(self.tempPrefixId)
-        self.face.registerPrefix(self.prefix, self._onCommandReceived, self.onRegisterFailed)
-
-        self.loop.call_later(5, self._updateCapabilities)
-
-    def _certificateValidationFailed(self, data):
-        self.log.error("Certificate from controller is invalid!")
-        # remove trust info
-        self._policyManager.removeTrustRules()
-
-    def _onCertificateReceived(self, interest, data):
-        # if we were successful, the content of this data is an HMAC
-        # signed packet containing an encoded cert
-        if self._hmacHandler.verifyData(data):
-            self._processValidCertificate(data)
-        else:
-            self._certificateValidationFailed(data)
-
-
 if __name__ == '__main__':
-    n = IotConsole()
+    import sys
     try:
-        n.start()
-    finally:
-        n.stop()
+        with open('/tmp/ndn-iot/iot.conf') as nameFile:
+            info = nameFile.readline()
+            networkName, controllerName = info.strip().split()
+    except IOError as e:
+            if e.errno == 2:
+                print ('Cannot connect to gateway. Please ensure that it is running.')
+            else:
+                print ('Unknown error {} encountered. Exiting...'.format(e.errno))
+            sys.exit(1)
+
+    n = IotConsole(networkName, controllerName)
+    n.start()

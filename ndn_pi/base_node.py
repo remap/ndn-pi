@@ -61,7 +61,6 @@ class BaseNode(object):
 
         self._setupComplete = False
 
-
 ##
 # Logging
 ##
@@ -125,8 +124,10 @@ class BaseNode(object):
         
         try:
             self.loop.run_forever()
+        except KeyboardInterrupt:
+            pass
         except Exception as e:
-            self.log.exception(exc_info=True)
+            self.log.exception(e, exc_info=True)
         finally:
             self._isStopped = True
 

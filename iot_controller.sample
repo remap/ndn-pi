@@ -1,0 +1,4 @@
+device {
+  environmentPrefix /home
+  controllerName gateway
+}

@@ -23,6 +23,7 @@ from pyndn.util import Blob
 from pyndn.name import Name
 from iot_private_key_storage import IotPrivateKeyStorage
 from Crypto.PublicKey import RSA
+from Crypto.Cipher import PKCS1_OAEP
 from pyndn.security.security_types import KeyType
 from pyndn.security.certificate import IdentityCertificate, PublicKey, CertificateSubjectDescription
 from pyndn.security.security_exception import SecurityException
@@ -136,4 +137,48 @@ class IotIdentityManager(IdentityManager):
 
         return certificate
         
+    def encryptForIdentity(self, plaintext, identityName=None, keyName=None):
+        """
+        Encrypt the given bytes using the default key for the given identity,
+        or the specfied key. If the key name is specified, the identity name is ignored.
+        If there is no key or identity name given, a SecurityException is raised.
+        :param plaintext: The data to encrypt
+        :type plaintext: Blob
+        :param Name identityName: (optional) The identity who will decrypt the message.
+        :param Name keyName: (optional) The key used to encrypt the message.
+        :return: The encrypted data
+        :rtype: Blob
+        """
+        if keyName is None:
+            keyName = self.getDefaultKeyNameForIdentity(identityName)
+        keyDer = self._identityStorage.getKey(keyName)
 
+        key = RSA.importKey(str(keyDer))
+        cipher = PKCS1_OAEP.new(key)
+        
+        encrypted = Blob(cipher.encrypt(str(plaintext)), False)
+
+        return encrypted
+
+    def decryptAsIdentity(self, ciphertext, identityName=None, keyName=None):
+        """
+        Decrypt the given bytes using the default key for the given identity,
+        or the specfied key. If the key name is specified, the identity name is ignored.
+        If there is no key or identity name given, a SecurityException is raised.
+        :param ciphertext: The data to decrypt
+        :type ciphertext: Blob
+        :param Name identityName: (optional) The identity the message is intended for.
+        :param Name keyName: (optional) The key used to decrypt the message.
+        :return: The decrypted data
+        :rtype: Blob
+        """
+        if keyName is None:
+            keyName = self.getDefaultKeyNameForIdentity(identityName)
+        keyDer = self.getPrivateKey(keyName)
+        key = RSA.importKey(str(keyDer))
+        cipher = PKCS1_OAEP.new(key)
+    
+        decrypted = Blob(cipher.decrypt(str(ciphertext)), False)
+
+        return decrypted
+        
