@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='send-pairing-info.proto',
   package='',
-  serialized_pb='\n\x17send-pairing-info.proto\"\xad\x01\n\x18\x44\x65vicePairingInfoMessage\x12:\n\x04info\x18\xf3\x01 \x02(\x0b\x32+.DevicePairingInfoMessage.DevicePairingInfo\x1aU\n\x11\x44\x65vicePairingInfo\x12\x15\n\x0c\x64\x65viceSerial\x18\xf0\x01 \x02(\t\x12\x12\n\tdevicePin\x18\xf1\x01 \x02(\x0c\x12\x15\n\x0c\x64\x65viceSuffix\x18\xf2\x01 \x02(\t')
+  serialized_pb='\n\x17send-pairing-info.proto\"\xad\x01\n\x18\x44\x65vicePairingInfoMessage\x12:\n\x04info\x18\xee\x01 \x02(\x0b\x32+.DevicePairingInfoMessage.DevicePairingInfo\x1aU\n\x11\x44\x65vicePairingInfo\x12\x15\n\x0c\x64\x65viceSerial\x18\xeb\x01 \x02(\t\x12\x12\n\tdevicePin\x18\xec\x01 \x02(\x0c\x12\x15\n\x0c\x64\x65viceSuffix\x18\xed\x01 \x02(\t')
 
 
 
@@ -25,21 +25,21 @@ _DEVICEPAIRINGINFOMESSAGE_DEVICEPAIRINGINFO = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='deviceSerial', full_name='DevicePairingInfoMessage.DevicePairingInfo.deviceSerial', index=0,
-      number=240, type=9, cpp_type=9, label=2,
+      number=235, type=9, cpp_type=9, label=2,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='devicePin', full_name='DevicePairingInfoMessage.DevicePairingInfo.devicePin', index=1,
-      number=241, type=12, cpp_type=9, label=2,
+      number=236, type=12, cpp_type=9, label=2,
       has_default_value=False, default_value="",
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='deviceSuffix', full_name='DevicePairingInfoMessage.DevicePairingInfo.deviceSuffix', index=2,
-      number=242, type=9, cpp_type=9, label=2,
+      number=237, type=9, cpp_type=9, label=2,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -66,7 +66,7 @@ _DEVICEPAIRINGINFOMESSAGE = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='info', full_name='DevicePairingInfoMessage.info', index=0,
-      number=243, type=11, cpp_type=10, label=2,
+      number=238, type=11, cpp_type=10, label=2,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,

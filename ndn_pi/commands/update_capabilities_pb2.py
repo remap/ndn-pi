@@ -11,7 +11,7 @@ from google.protobuf import descriptor_pb2
 DESCRIPTOR = descriptor.FileDescriptor(
   name='update-capabilities.proto',
   package='',
-  serialized_pb='\n\x19update-capabilities.proto\"\x98\x03\n UpdateCapabilitiesCommandMessage\x12\x43\n\x0c\x63\x61pabilities\x18\xe5\x01 \x03(\x0b\x32,.UpdateCapabilitiesCommandMessage.Capability\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe3\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe4\x01 \x01(\t\x1a\xc9\x01\n\nCapability\x12>\n\rcommandPrefix\x18\xe0\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe1\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe2\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter\x12\x17\n\x0eneedsSignature\x18\xe6\x01 \x01(\x08')
+  serialized_pb='\n\x19update-capabilities.proto\"\x98\x03\n UpdateCapabilitiesCommandMessage\x12\x43\n\x0c\x63\x61pabilities\x18\xea\x01 \x03(\x0b\x32,.UpdateCapabilitiesCommandMessage.Capability\x1a\x1a\n\x04Name\x12\x12\n\ncomponents\x18\x08 \x03(\x0c\x1aG\n\x15\x43\x61pabilitiesParameter\x12\x16\n\rparameterType\x18\xe4\x01 \x02(\t\x12\x16\n\rparameterDesc\x18\xe5\x01 \x01(\t\x1a\xc9\x01\n\nCapability\x12>\n\rcommandPrefix\x18\xe6\x01 \x02(\x0b\x32&.UpdateCapabilitiesCommandMessage.Name\x12\x11\n\x08keywords\x18\xe7\x01 \x03(\t\x12O\n\rparameterDesc\x18\xe8\x01 \x03(\x0b\x32\x37.UpdateCapabilitiesCommandMessage.CapabilitiesParameter\x12\x17\n\x0eneedsSignature\x18\xe9\x01 \x01(\x08')
 
 
 
@@ -52,14 +52,14 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITIESPARAMETER = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='parameterType', full_name='UpdateCapabilitiesCommandMessage.CapabilitiesParameter.parameterType', index=0,
-      number=227, type=9, cpp_type=9, label=2,
+      number=228, type=9, cpp_type=9, label=2,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='parameterDesc', full_name='UpdateCapabilitiesCommandMessage.CapabilitiesParameter.parameterDesc', index=1,
-      number=228, type=9, cpp_type=9, label=1,
+      number=229, type=9, cpp_type=9, label=1,
       has_default_value=False, default_value=unicode("", "utf-8"),
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -86,28 +86,28 @@ _UPDATECAPABILITIESCOMMANDMESSAGE_CAPABILITY = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='commandPrefix', full_name='UpdateCapabilitiesCommandMessage.Capability.commandPrefix', index=0,
-      number=224, type=11, cpp_type=10, label=2,
+      number=230, type=11, cpp_type=10, label=2,
       has_default_value=False, default_value=None,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='keywords', full_name='UpdateCapabilitiesCommandMessage.Capability.keywords', index=1,
-      number=225, type=9, cpp_type=9, label=3,
+      number=231, type=9, cpp_type=9, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='parameterDesc', full_name='UpdateCapabilitiesCommandMessage.Capability.parameterDesc', index=2,
-      number=226, type=11, cpp_type=10, label=3,
+      number=232, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     descriptor.FieldDescriptor(
       name='needsSignature', full_name='UpdateCapabilitiesCommandMessage.Capability.needsSignature', index=3,
-      number=230, type=8, cpp_type=7, label=1,
+      number=233, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -134,7 +134,7 @@ _UPDATECAPABILITIESCOMMANDMESSAGE = descriptor.Descriptor(
   fields=[
     descriptor.FieldDescriptor(
       name='capabilities', full_name='UpdateCapabilitiesCommandMessage.capabilities', index=0,
-      number=229, type=11, cpp_type=10, label=3,
+      number=234, type=11, cpp_type=10, label=3,
       has_default_value=False, default_value=[],
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,

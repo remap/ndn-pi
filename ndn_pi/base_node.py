@@ -68,8 +68,10 @@ class BaseNode(object):
         self._hubPrefix = Name('/localhop/configure')
 
     def getSerial(self):
-        # since you may wish to run two nodes on a Raspberry Pi, each
-        # node will generate a unique per-run serial
+        """
+         Since you may wish to run two nodes on a Raspberry Pi, each
+         node will generate a unique serial number each time it starts up.
+        """
         if self._instanceSerial is None:
             prefixLen = 4
             prefix = ''
@@ -214,5 +216,4 @@ class BaseNode(object):
             for line in f:
                 if line.startswith('Serial'):
                     return line.split(':')[1].strip()
-
 

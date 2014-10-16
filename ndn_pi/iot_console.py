@@ -28,7 +28,7 @@ from pyndn.encoding import ProtobufTlv
 from pyndn.security.security_exception import SecurityException
 
 from ndn_pi.security import IotIdentityStorage,IotPolicyManager, IotIdentityManager
-from commands import CertificateRequestMessage, UpdateCapabilitiesCommandMessage, DeviceConfigurationMessage, DevicePairingInfoMessage
+from commands import DevicePairingInfoMessage
 
 from collections import defaultdict, OrderedDict
 import json
@@ -65,8 +65,6 @@ class IotConsole(object):
         self._policyManager = IotPolicyManager(self._identityStorage)
         self._identityManager = IotIdentityManager(self._identityStorage)
         self._keyChain = KeyChain(self._identityManager, self._policyManager)
-
-        self._identityStorage.setDefaultIdentity(self.prefix)
 
         self._policyManager.setEnvironmentPrefix(self.networkPrefix)
         self._policyManager.setTrustRootIdentity(self.prefix)
@@ -170,14 +168,21 @@ class IotConsole(object):
        try:
             commandList = []
             for capability, commands in self.foundCommands.items():
-                commandList.append('{}:'.format(capability))
+                commandList.append('\Z1{}:'.format(capability))
                 for info in commands:
                     signingStr = 'signed' if info['signed'] else 'unsigned'
-                    commandList.append('\t{} ({})'.format(info['name'], signingStr))
+                    commandList.append('\Z0\t{} ({})'.format(info['name'], signingStr))
+                commandList.append('')
+                
             if len(commandList) == 0:
                 # should not happen
                 commandList = ['----NONE----']
-            self.ui.menu('Available services', commandList, prefix='', extras=['--no-cancel']) 
+            allCommands = '\n'.join(commandList)
+            oldTitle = self.ui.title
+            self.ui.title = 'Available services'
+            self.ui.alert(allCommands, preExtra=['--colors'])
+            self.ui.title = oldTitle
+            #self.ui.menu('Available services', commandList, prefix='', extras=['--no-cancel']) 
        finally:
             self.loop.call_soon(self.displayMenu)
 

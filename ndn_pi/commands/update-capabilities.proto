@@ -4,17 +4,18 @@ message UpdateCapabilitiesCommandMessage {
 	}
 
 	message CapabilitiesParameter {
-		required string parameterType = 227; // should be a protobuf type
-		optional string parameterDesc = 228; // what is this parameter for? (recommended)
+		required string parameterType = 228; // should be a protobuf type
+		optional string parameterDesc = 229; // what is this parameter for? (recommended)
 	}
 
 	message Capability {
-		required Name commandPrefix = 224; // the name (after device prefix) of command 
-		repeated string keywords = 225; // other devices can search for one or more keywords
+		required Name commandPrefix = 230; // the name (after device prefix) of command 
+		repeated string keywords = 231; // other devices can search for one or more keywords
 						// e.g. 'cec', 'motion', 'thermostat'
-		repeated CapabilitiesParameter parameterDesc = 226; // list of parameter descriptions
-        optional bool needsSignature=230;
+		repeated CapabilitiesParameter parameterDesc = 232; // list of parameter descriptions
+        optional bool needsSignature=233;
+        required String deviceSerial=234;
 	}
 
-    repeated Capability capabilities = 229;
+    repeated Capability capabilities = 235;
 }

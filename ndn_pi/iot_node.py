@@ -73,7 +73,7 @@ class IotNode(BaseNode):
     def beforeLoopStart(self):
         print("Serial: {}\nConfiguration PIN: {}".format(self.deviceSerial, self._createNewPin()))
         self.face.registerPrefix(self._hubPrefix,
-            self._onConfigurationReceived, self.onRegisterFailed)
+            self._onConfigurationReceived, self._onConfigurationRegistrationFailure)
 
 #####
 # Pre-configuration flow
@@ -122,7 +122,7 @@ class IotNode(BaseNode):
         if self._registrationFailures < 5:
             self._registrationFailures += 1
             self.log.warn("Could not register {}, retry: {}/{}".format(prefix.toUri(), self._registrationFailures, 5)) 
-            self.face.registerPrefix(self.prefix, self._onConfigurationReceived, 
+            self.face.registerPrefix(self._hubPrefix, self._onConfigurationReceived, 
                 self._onConfigurationRegistrationFailure)
         else:
             self.log.critical("Could not register device prefix, ABORTING")

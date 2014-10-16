@@ -1,11 +1,11 @@
 #!/bin/bash
 
 SHOW_USAGE=0
-INTERFACE=wlan0
-while getopts ":i:" opt; do
+n=0
+while getopts ":h" opt; do
   case $opt in
-    i) 
-      INTERFACE=$OPTARG
+    h)
+      SHOW_USAGE=1
       ;;
     \?)
       SHOW_USAGE=1
@@ -16,12 +16,31 @@ while getopts ":i:" opt; do
   esac
 done
 
-[[ $SHOW_USAGE -eq 1 ]] && { echo "Usage: $0 [-i interface_name]"; exit 1; }
+[[ $SHOW_USAGE -eq 1 ]] && { echo "Usage: $0 [interface ...]"; exit 1; }
 
+
+if [ "$#" -eq 0 ]; then
+    INTERFACES=( "wlan0" )
+else
+    INTERFACES=( "$@" )
+fi
+
+nfd-stop
 nfd-start
 
-IP_ADDR=`ifconfig $INTERFACE | grep -Eo 'inet addr:[0-9\.]*'| cut -d: -f2`
-FACE_ID=`nfd-status -f | grep $IP_ADDR | awk '{print $1}' | cut -d= -f2`
+nfd-status -c &> /dev/null
 
-nfdc register / $FACE_ID
+[[ "$?" -ne 0 ]] && { echo "NFD could not be started, aborting"; exit 1;}
+
+for INTERFACE in "${INTERFACES[@]}" 
+do
+    echo "Registering NFD on interface $INTERFACE..."
+    IP_ADDR=`ifconfig $INTERFACE | grep -Eo 'inet addr:[0-9\.]*'| cut -d: -f2`
+    if [ $IP_ADDR ]; then
+        FACE_ID=`nfd-status -f | grep $IP_ADDR | awk '{print $1}' | cut -d= -f2`
+        nfdc register / $FACE_ID
+    else
+        echo "$INTERFACE appears down, skipping..."
+    fi
+done
 

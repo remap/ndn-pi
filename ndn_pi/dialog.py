@@ -82,11 +82,11 @@ class Dialog(object):
         defaultno = '--defaultno' if default == 'no' else ''
         return self.run('yesno', msg, postExtra=[defaultno], exit_on=[255]).returncode == 0
 
-    def alert(self, msg, showButtons=True):
+    def alert(self, msg, showButtons=True, preExtra=()):
         if not showButtons:
-            self.run('infobox', msg)
+            self.run('infobox', msg, preExtra=preExtra)
         else:
-            self.run('msgbox', msg)
+            self.run('msgbox', msg, preExtra=preExtra)
 
     def view_file(self, path):
         self.run('textbox', path, postExtra=['--scrolltext'])

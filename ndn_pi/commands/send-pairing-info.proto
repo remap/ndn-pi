@@ -1,8 +1,8 @@
 message DevicePairingInfoMessage {
  message DevicePairingInfo {
-    required string deviceSerial = 240;
-    required bytes devicePin = 241;
-    required string deviceSuffix = 242;
+    required string deviceSerial = 236;
+    required bytes devicePin = 237;
+    required string deviceSuffix = 238;
 }
- required DevicePairingInfo info = 243;
+ required DevicePairingInfo info = 239;
 }
