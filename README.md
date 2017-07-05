@@ -3,6 +3,9 @@ Named Data Network Internet of Things Toolkit (NDN-IoTT)
 
  ***
  Update: Due to a lot of recent interest in this toolkit, there is now [a form here](https://goo.gl/forms/WDTG0Xtx2OT4KL0h1) for anyone who is running into difficulties installing or using ndn-pi. Based on the responses, we may update the project.
+ 
+ While you wait for an update, some users have reported success using current versions of PyNDN2 and copying parts of the [updated ndn-pi framework](https://github.com/remap/ndn-flow/tree/master/framework/ndn_pi) used in the Flow application.
+ 
  ***
  
  Getting Started
